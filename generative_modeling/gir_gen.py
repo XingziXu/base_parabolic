@@ -60,7 +60,7 @@ class FKModule(pl.LightningModule):
             plt.scatter(samples[:,0], samples[:,1], alpha=0.1, label=r'$X_T$')
             plt.scatter(xinit[:,0], xinit[:,1], alpha=0.1, label=r'$X_0$')
             plt.legend()
-            plt.savefig('samples.pdf')
+            plt.savefig('samples.png')
             plt.close('all')
 
             # plot the vector fields 
@@ -68,11 +68,11 @@ class FKModule(pl.LightningModule):
             X_ = torch.stack((x,y),-1).reshape(-1,2)
 
             plt.quiver(x.cpu(), y.cpu(), -self.mu(X_)[:,0].cpu(), -self.mu(X_)[:,1].cpu())
-            plt.savefig('negvec.pdf')
+            plt.savefig('negvec.png')
             plt.close('all')
 
             plt.quiver(x.cpu(), y.cpu(), self.mu(X_)[:,0].cpu(), self.mu(X_)[:,1].cpu())
-            plt.savefig('vec.pdf')
+            plt.savefig('vec.png')
             plt.close('all')
         else:
             samples = samples.reshape(-1,int(np.sqrt(self.d)), int(np.sqrt(self.d)))
@@ -112,7 +112,7 @@ class FKModule(pl.LightningModule):
 
         return ( g + a + b + v ).mean()
 
-    def trace_grad(self, mu, Wt, N=10):
+    def trace_grad(self, mu, Wt, N=1):
 
         # Hutchinson's trace trick
 

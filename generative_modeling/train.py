@@ -25,8 +25,8 @@ trainer_params = {
         'check_val_every_n_epoch' : 1,
         'max_epochs' : EPOCHS,
         #'progress_bar_refresh_rate' : 0,
-        'checkpoint_callback' : False,
-        'logger' : False
+        #'checkpoint_callback' : False,
+        #'logger' : False
         }
 datatype = 'moons'
 #dataset = USPS(root='../../Data/USPS', train=True, download=True, transform=transforms.ToTensor())
@@ -56,7 +56,7 @@ plt.savefig('orig.pdf')
 plt.close('all')
 
 # drift
-mu = SMLP(d, 256, 3, d).to('cuda:0')
+mu = SMLP(d, 200, 3, d).to('cuda:0')
 #nn.init.zeros_(mu.out.weight.data)
 
 # boundary condition
