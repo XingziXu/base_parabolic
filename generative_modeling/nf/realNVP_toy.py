@@ -11,9 +11,9 @@ from torch import nn
 
 # Set up model
 
-class SMLP(nn.Module):
+class SMLP_nf(nn.Module):
     def __init__(self, input_size, hidden_size, layers, out_size, act=nn.SELU()):
-        super(SMLP, self).__init__()
+        super(SMLP_nf, self).__init__()
 
         self.act = act
 
@@ -42,7 +42,7 @@ for i in range(num_layers):
     # Neural network with two hidden layers having 64 units each
     # Last layer is initialized by zeros making training more stable
     #param_map = nf.nets.MLP([1, 64, 64, 2], init_zeros=True)
-    param_map = SMLP(1, 64, 3, 2, nn.Tanh())
+    param_map = SMLP_nf(1, 64, 3, 2, nn.Tanh())
     # Add flow layer
     flows.append(nf.flows.AffineCouplingBlock(param_map))
     # Swap dimensions

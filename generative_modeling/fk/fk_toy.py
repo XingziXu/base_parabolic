@@ -112,6 +112,27 @@ class MLP(nn.Module):
         output = self.main(input) # forward
         return output
     
+class SMLP_nf(nn.Module):
+    def __init__(self, input_size, hidden_size, layers, out_size, act=nn.SELU()):
+        super(SMLP_nf, self).__init__()
+
+        self.act = act
+
+        self.fc1 = nn.Linear(input_size,hidden_size)
+        mid_list = []
+        for i in range(layers):
+           mid_list += [nn.Linear(hidden_size,hidden_size), act]
+
+        self.mid = nn.Sequential(*mid_list)
+        self.out = nn.Linear(hidden_size, out_size, bias=False)
+
+    def forward(self,x):
+        out = self.fc1(x)
+        out = self.act(out)
+        out = self.mid(out)
+        out = self.out(out)
+        return out
+
 class SMLP(nn.Module):
     def __init__(self, input_size, hidden_size, layers, out_size, act=nn.SELU()):
         super(SMLP, self).__init__()

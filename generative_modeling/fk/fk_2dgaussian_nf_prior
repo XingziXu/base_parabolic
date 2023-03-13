@@ -25,6 +25,8 @@ from sklearn.datasets import make_swiss_roll
 from sklearn.datasets import make_moons
 import sys
 import math
+import normflows as nf
+from scipy.stats.stats import pearsonr
 
 class TwoGaussian:
     def sample(self, n):
@@ -112,6 +114,27 @@ class MLP(nn.Module):
         output = self.main(input) # forward
         return output
     
+class SMLP_nf(nn.Module):
+    def __init__(self, input_size, hidden_size, layers, out_size, act=nn.SELU()):
+        super(SMLP_nf, self).__init__()
+
+        self.act = act
+
+        self.fc1 = nn.Linear(input_size,hidden_size)
+        mid_list = []
+        for i in range(layers):
+           mid_list += [nn.Linear(hidden_size,hidden_size), act]
+
+        self.mid = nn.Sequential(*mid_list)
+        self.out = nn.Linear(hidden_size, out_size, bias=False)
+
+    def forward(self,x):
+        out = self.fc1(x)
+        out = self.act(out)
+        out = self.mid(out)
+        out = self.out(out)
+        return out    
+
 class SMLP(nn.Module):
     def __init__(self, input_size, hidden_size, layers, out_size, act=nn.SELU()):
         super(SMLP, self).__init__()
@@ -187,7 +210,7 @@ class FKModule(pl.LightningModule):
     def __init__(self):
         super().__init__()
         #self.mu = MLP(input_dim=2, index_dim=0, hidden_dim=256, output_dim=2) # function representing the measure
-        self.mu = SMLP(2, 256, 3, 2, nn.Tanh())
+        self.mu = SMLP(2, 200, 3, 2, nn.Tanh())
         #self.sigma = MLP(input_dim=0, index_dim=1, hidden_dim=64, output_dim=1) # function representing the measure
         self.T = nn.Parameter(torch.Tensor([0.1])) # terminal time
         #self.T = 0.1 # terminal time
@@ -196,9 +219,9 @@ class FKModule(pl.LightningModule):
         self.dt = self.t[1]-self.t[0] # size of time steps
         self.N = 75 # number of instances of Y_t used to approximate the expectation
         self.sdt = torch.sqrt(self.dt).to(device)
-        self.batch_size = 300
+        self.batch_size = 200
         self.dW = torch.randn(self.N, self.batch_size, self.num_steps-2, 2).to(device)
-        self.p0 = MultivariateNormal(torch.zeros(2).to(device), torch.eye(2).to(device))
+        #self.p0 = MultivariateNormal(torch.zeros(2).to(device), torch.eye(2).to(device))
         self.num_steps_val = 50
         self.t_val = torch.linspace(0., self.T.data[0], self.num_steps_val-1).to(device) 
         self.dt_val = self.t_val[1]-self.t_val[0] 
@@ -207,6 +230,27 @@ class FKModule(pl.LightningModule):
         self.weight_pos = 1e-2
         #self.variance = torch.eye(2).to(device)
         self.variance = SMLP(1, 16, 3, 2, nn.Tanh())
+        
+        # Define 2D Gaussian base distribution
+        base = nf.distributions.base.DiagGaussian(2)
+
+        # Define list of flows
+        num_layers = 32
+        flows = []
+        for i in range(num_layers):
+            # Neural network with two hidden layers having 64 units each
+            # Last layer is initialized by zeros making training more stable
+            #param_map = nf.nets.MLP([1, 64, 64, 2], init_zeros=True)
+            param_map = SMLP_nf(1, 64, 3, 2, nn.Tanh())
+            # Add flow layer
+            flows.append(nf.flows.AffineCouplingBlock(param_map))
+            # Swap dimensions
+            flows.append(nf.flows.Permute(2, mode='swap'))
+            
+        # Construct flow model
+        model = nf.NormalizingFlow(base, flows) 
+        model.load_state_dict(torch.load('/scratch/xx84/girsanov/generative_modeling/nf/nf_prior.pt'))
+        self.p0 = model
     
     def loss(self, batch):
         # we calculate p(d_i,T) using equation (11). 
@@ -241,18 +285,18 @@ class FKModule(pl.LightningModule):
         return -self.elbo(yT,div)# - self.weight_pos * pos_def(self.variance, N=10)
 
     def elbo(self,yT,div):
-        logp0yT = self.p0.log_prob(yT)
+        logp0yT = self.p0.log_prob(yT.reshape(yT.shape[0]*yT.shape[1],yT.shape[2]))
         elbo = torch.mean(logp0yT) + torch.mean(div)
         return elbo
     
     def exact_prob(self,yT,div):
-        logp0yT = self.p0.log_prob(yT)
+        logp0yT = self.p0.log_prob(yT.reshape(yT.shape[0]*yT.shape[1],yT.shape[2]))
         pxt = torch.mean(torch.exp(logp0yT) * torch.exp(div))
         return pxt
 
     def sample(self, num_sample):
         with torch.no_grad():
-            x = self.p0.sample((num_sample,))
+            x = self.p0.sample(num_sample)[0]
             x_current = x
             self.t_val = torch.linspace(0., self.T.data[0], self.num_steps_val-1).to(device) # time steps
             self.dt_val = self.t_val[1]-self.t_val[0]
@@ -293,6 +337,10 @@ class FKModule(pl.LightningModule):
         x0,xT = self.sample(num_sample = 1000)
         x0 = x0.cpu().numpy()
         xT = xT.cpu().numpy()
+        batch = batch.to(device)
+        batch = batch.type(torch.FloatTensor)
+        val_loss = self.loss(batch)
+        self.log('val_loss', val_loss)
         batch = batch.cpu().numpy()
         plt.scatter(batch[:,0], batch[:,1], alpha=0.1, label='Real')
         plt.scatter(xT[:,0], xT[:,1], alpha=0.1, label=r'$X_T$')
@@ -332,11 +380,11 @@ class FKModule(pl.LightningModule):
         ax.set_zlabel('Z-axis')
         plt.savefig('something.png')
         """
-        return
+        return {'val_loss': val_loss}
         
         
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=8e-4)
+        optimizer = torch.optim.AdamW([{'params': self.mu.parameters()},{'params': self.variance.parameters()}], lr=8e-4)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
         #optimizer_g = torch.optim.AdamW([self.variance], lr=1e-5)
         #optimizers = [optimizer_mu, optimizer_g]
@@ -345,25 +393,64 @@ class FKModule(pl.LightningModule):
         #return optimizers, schedulers
 
 if __name__ == '__main__':
-    pl.seed_everything(1234)
+    pl.seed_everything(1240)
     print(sys.executable)
     device = torch.device("cuda:0")
     
-    #p0 = MultivariateNormal(torch.zeros(2), torch.eye(2))
-    #d0 = p0.sample([1000]).data.numpy()
-    #Loss =  SamplesLoss("sinkhorn", blur=0.05,)
-    #loss = []
-    #train_loss = []
-    #loss_time = []
+    dim=2
     
-    sampler_moon = Moons()
-    d_moon_t = sampler_moon.sample(30000).cpu().data.numpy()
-    train_loader_moon = torch.utils.data.DataLoader(d_moon_t, batch_size = 300, shuffle=True, num_workers = 1)
-    d_moon_v = sampler_moon.sample(1000).cpu().data.numpy()
-    val_loader_moon = torch.utils.data.DataLoader(d_moon_v, batch_size = 1000, shuffle=False)
-    #loss.append(Loss(torch.tensor(d0).type(torch.FloatTensor),torch.tensor(d_moon_v).type(torch.FloatTensor)).item())
-    model = FKModule()
-    trainer = pl.Trainer(max_epochs=100,gpus=1)
-    trainer.fit(model, train_loader_moon, val_loader_moon)
-    #train_loss.append(trainer.logged_metrics['train_loss'])
-    #loss_time.append(trainer.logged_metrics['loss_time'])
+    # train model with cifar datasets of different labels
+    val_bpd = []
+    # Define 2D Gaussian base distribution
+    base = nf.distributions.base.DiagGaussian(2)
+
+    # Define list of flows
+    num_layers = 32
+    flows = []
+    for i in range(num_layers):
+        # Neural network with two hidden layers having 64 units each
+        # Last layer is initialized by zeros making training more stable
+        #param_map = nf.nets.MLP([1, 64, 64, 2], init_zeros=True)
+        param_map = SMLP_nf(1, 64, 3, 2, nn.Tanh())
+        # Add flow layer
+        flows.append(nf.flows.AffineCouplingBlock(param_map))
+        # Swap dimensions
+        flows.append(nf.flows.Permute(2, mode='swap'))
+        
+    # Construct flow model
+    model = nf.NormalizingFlow(base, flows) 
+    model.load_state_dict(torch.load('/scratch/xx84/girsanov/generative_modeling/nf/nf_prior.pt'))
+    p0 = model
+    d0 = p0.sample(500)[0].detach().numpy()
+    Loss =  SamplesLoss("sinkhorn", blur=0.05,)
+    loss = []
+
+    for i in range(10):
+        p_i = MultivariateNormal(torch.zeros(dim) + 1. * i * torch.ones(dim), torch.eye(dim))
+        trainset = p_i.sample([2000])
+        testset = p_i.sample([200])
+        train_loader = torch.utils.data.DataLoader(trainset, batch_size = 200, shuffle=True, num_workers = 1)
+        test_loader = torch.utils.data.DataLoader(testset, batch_size = 200, shuffle=True)
+        #train_loader = torch.utils.data.DataLoader(trainset, batch_size = 256, shuffle=True, num_workers = 1)
+        #test_loader = torch.utils.data.DataLoader(testset, batch_size = 1000, shuffle=False)
+        model = FKModule()
+        trainer = pl.Trainer(max_epochs=3,gpus=1)
+        trainer.fit(model, train_loader, test_loader)
+        val_bpd.append(trainer.logged_metrics['val_loss'])
+        loss.append(Loss(torch.tensor(d0).type(torch.FloatTensor),torch.tensor(trainset).type(torch.FloatTensor)).item())
+
+    with open('/scratch/xx84/girsanov/generative_modeling/2dgaussian_bpd_3.npy', 'wb') as f:
+        np.save(f, val_bpd)
+    with open('/scratch/xx84/girsanov/generative_modeling/2dgaussian_loss_3.npy', 'wb') as f:
+        np.save(f, loss)
+    fig = plt.figure()
+    ax0 = fig.add_subplot(111)
+    ax0.scatter(loss, val_bpd)
+    ax0.set_ylabel('ELBO Loss')
+    #ax1 = fig.add_subplot(212)
+    #ax1.plot(loss[2:], loss_time[2:])
+    #ax1.scatter(loss[0:2], loss_time[0:2])
+    #ax1.set_ylabel('integration time')
+    ax0.set_xlabel('Wasserstein distance')
+    plt.savefig('bpd_toy_fokker_planck.png')
+    print(pearsonr(loss, val_bpd))
