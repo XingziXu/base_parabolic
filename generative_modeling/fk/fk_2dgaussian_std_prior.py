@@ -209,7 +209,7 @@ def pos_def(mat, N=10):
 class FKModule(pl.LightningModule):
     def __init__(self):
         super().__init__()
-        self.dim = 100
+        self.dim = 2
         #self.mu = MLP(input_dim=2, index_dim=0, hidden_dim=256, output_dim=2) # function representing the measure
         self.mu = SMLP(self.dim, 200, 3, self.dim, nn.Tanh())
         #self.sigma = MLP(input_dim=0, index_dim=1, hidden_dim=64, output_dim=1) # function representing the measure
@@ -341,11 +341,11 @@ if __name__ == '__main__':
     print(sys.executable)
     device = torch.device("cuda:0")
     
-    dim=100
+    dim=2
     
     # train model with cifar datasets of different labels
     val_bpd = []
-    p0 = MultivariateNormal(torch.zeros(100).to(device), torch.eye(100).to(device))
+    p0 = MultivariateNormal(torch.zeros(dim).to(device), torch.eye(dim).to(device))
     d0 = p0.sample((500,)).cpu().detach().numpy()
     Loss =  SamplesLoss("sinkhorn", blur=0.05,)
     loss = []
@@ -364,9 +364,9 @@ if __name__ == '__main__':
         val_bpd.append(trainer.logged_metrics['val_loss'])
         loss.append(Loss(torch.tensor(d0).type(torch.FloatTensor),torch.tensor(trainset).type(torch.FloatTensor)).item())
 
-    with open('/scratch/xx84/girsanov/generative_modeling/100dgaussian_bpd_0.npy', 'wb') as f:
+    with open('/scratch/xx84/girsanov/generative_modeling/2dgaussian_bpd_std_0.npy', 'wb') as f:
         np.save(f, val_bpd)
-    with open('/scratch/xx84/girsanov/generative_modeling/100dgaussian_loss_0.npy', 'wb') as f:
+    with open('/scratch/xx84/girsanov/generative_modeling/2dgaussian_loss_std_0.npy', 'wb') as f:
         np.save(f, loss)
     fig = plt.figure()
     ax0 = fig.add_subplot(111)
@@ -377,5 +377,5 @@ if __name__ == '__main__':
     #ax1.scatter(loss[0:2], loss_time[0:2])
     #ax1.set_ylabel('integration time')
     ax0.set_xlabel('Wasserstein distance')
-    plt.savefig('bpd_toy_fokker_planck_100d.png')
+    plt.savefig('bpd_toy_fokker_planck_2d_std.png')
     print(pearsonr(loss, val_bpd))
