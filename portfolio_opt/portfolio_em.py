@@ -59,8 +59,8 @@ class FKModule(pl.LightningModule):
         
         self.model = PI()
         
-        self.metrics = torch.zeros((100,5))
-        self.epochs = torch.linspace(0,99,100)
+        self.metrics = torch.zeros((20,5))
+        self.epochs = torch.linspace(0,19,20)
         
 
         
@@ -73,7 +73,7 @@ class FKModule(pl.LightningModule):
         x4 = x[:,:,4]
         
         mu0 = x0 + x2 + x3
-        mu1 = x1 ** 2
+        mu1 = x1 ** 0.5
         mu2 = torch.cos(x2)
         mu3 = torch.sin(x3)
         mu4 = x4
@@ -92,14 +92,14 @@ class FKModule(pl.LightningModule):
         #X.requires_grad = True
         
         for idx in range(self.Nt-1):
-            X0  = X0 + self.mu(X0) * self.dt + self.dW[:,:,:,idx] * self.sigma
+            X0  = X0 + self.mu(X0) * self.dt + self.dW[:,:,:,idx] * X0
         pi_norm = torch.norm(self.model.pi, p=1, dim=None, keepdim=False, out=None, dtype=None)
         x_end = X0
         yT_com = (self.model.pi.unsqueeze(0).unsqueeze(0) / pi_norm * x_end).sum(-1)
         
-        
-        
-        return -yT_com.mean()#torch.abs(hamiltonian_com).mean()
+        yT_com = yT_com[~torch.isnan(yT_com)]
+
+        return -yT_com[~torch.isnan(yT_com)].mean()#torch.abs(hamiltonian_com).mean()
 
     def training_step(self, batch, batch_idx):
         X0 = torch.abs(self.p_x0.sample((self.N_X0,)))
@@ -119,7 +119,7 @@ class FKModule(pl.LightningModule):
         #X.requires_grad = True
         
         for idx in range(self.Nt-1):
-            X0  = X0 + self.mu(X0) * self.dt + self.dW1[:,:,:,idx] * self.sigma
+            X0  = X0 + self.mu(X0) * self.dt + self.dW1[:,:,:,idx] * X0
         pi_norm = torch.norm(self.model.pi, p=1, dim=None, keepdim=False, out=None, dtype=None)
         x_end = X0
         yT_com = (self.model.pi.unsqueeze(0).unsqueeze(0) / pi_norm * x_end).sum(-1)
@@ -133,7 +133,7 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Magnitude')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/meta_fk/portfolio/em.png')
+        plt.savefig('/scratch/xx84/girsanov/portfolio_opt/em.png')
         plt.clf()
         return -yT_com.mean()
         
@@ -159,6 +159,6 @@ if __name__ == '__main__':
     train_loader = torch.utils.data.DataLoader(trainset, batch_size = 30, shuffle=True, num_workers = 1)
     test_loader = torch.utils.data.DataLoader(testset, batch_size = 30, shuffle=True)
     model = FKModule()
-    trainer = pl.Trainer(max_epochs=100,gpus=1,check_val_every_n_epoch=1)
+    trainer = pl.Trainer(max_epochs=20,gpus=1,check_val_every_n_epoch=1)
     trainer.fit(model, train_loader, test_loader)
     

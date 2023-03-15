@@ -59,10 +59,15 @@ class FKModule(pl.LightningModule):
         
         self.model = PI()
         
-        self.metrics = torch.zeros((100,5))
-        self.epochs = torch.linspace(0,99,100)
-
+        self.metrics = torch.zeros((20,5))
+        self.epochs = torch.linspace(0,19,20)
         
+        self.dim = 5
+
+    def f_gbm(self, dW):
+        Ts = torch.linspace(0,self.T,self.Nt)
+        W = torch.cumsum(dW, dim=-1)
+        return torch.exp(-0.5 * Ts.to(device).unsqueeze(0).unsqueeze(0).unsqueeze(0)+W.to(device))
 
     def mu_em(self, x):
         x0 = x[:,:,0]
@@ -87,7 +92,7 @@ class FKModule(pl.LightningModule):
         x4 = x[:,:,4,:]
         
         mu0 = x0 + x2 + x3
-        mu1 = x1 ** 2
+        mu1 = x1 ** 0.5
         mu2 = torch.cos(x2)
         mu3 = torch.sin(x3)
         mu4 = x4
@@ -99,16 +104,17 @@ class FKModule(pl.LightningModule):
         X0.requires_grad=True
         # calculating with girsanov
         
-        W = self.dW.cumsum(self.IDX_Nt) * self.sigma + X0.unsqueeze(0).unsqueeze(-1).repeat(self.N, 1, 1, self.Nt)
-        mu = self.mu_com(W)
-        a = (mu * self.dW / self.sigma).sum(self.IDX_D,keepdims=True).sum(self.IDX_Nt)
-        b = -0.5 * self.dt * (((mu / self.sigma) ** 2).sum(self.IDX_D,keepdims=True)).sum(self.IDX_Nt)
-        x_end = W[:,:,:,-1]
+        #W = self.dW.cumsum(self.IDX_Nt) * self.sigma + X0.unsqueeze(0).unsqueeze(-1).repeat(self.N, 1, 1, self.Nt)
+        Zs = self.f_gbm(self.dW)
+        mu = self.mu_com(Zs)
+        a = (mu * self.dW / Zs).sum(self.IDX_D,keepdims=True).sum(self.IDX_Nt)
+        b = -0.5 * self.dt * (((mu / Zs) ** 2).sum(self.IDX_D,keepdims=True)).sum(self.IDX_Nt)
+        z_end = Zs[:,:,:,-1]
         pi_norm = torch.norm(self.model.pi, p=1, dim=None, keepdim=False, out=None, dtype=None)
         #yT_com = torch.log((self.model.pi.unsqueeze(0).unsqueeze(0) / pi_norm * x_end).sum(-1)) + a.squeeze() + b.squeeze()
         #yT_com = (self.model.pi.unsqueeze(0).unsqueeze(0) / pi_norm * x_end).sum(-1) * (a.squeeze() + b.squeeze()).exp()
         #yT_com = x_end.sum(-1) * (a.squeeze() + b.squeeze()).exp()
-        yT_com = (self.model.pi.unsqueeze(0).unsqueeze(0) / pi_norm * x_end).sum(-1) * (a.squeeze() + b.squeeze()).exp()
+        yT_com = (self.model.pi.unsqueeze(0).unsqueeze(0) / pi_norm * z_end).sum(-1) * (a.squeeze() + b.squeeze()).exp()
         #yT_com = torch.log((self.model.pi.unsqueeze(0).unsqueeze(0) / pi_norm * x_end).sum(-1)) + (a.squeeze() + b.squeeze())
         
         #X01 = X0.unsqueeze(0).repeat(self.N,1,1)
@@ -143,7 +149,7 @@ class FKModule(pl.LightningModule):
         #X.requires_grad = True
         
         for idx in range(self.Nt-1):
-            X0  = X0 + self.mu_em(X0) * self.dt + self.dW1[:,:,:,idx] * self.sigma
+            X0  = X0 + self.mu_em(X0) * self.dt + self.dW1[:,:,:,idx] * X0
         pi_norm = torch.norm(self.model.pi, p=1, dim=None, keepdim=False, out=None, dtype=None)
         x_end = X0
         yT_com = (self.model.pi.unsqueeze(0).unsqueeze(0) / pi_norm * x_end).sum(-1)
@@ -157,7 +163,7 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Magnitude')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/meta_fk/portfolio/com.png')
+        plt.savefig('/scratch/xx84/girsanov/portfolio_opt/com.png')
         plt.clf()
         return -yT_com.mean()
         
@@ -183,6 +189,6 @@ if __name__ == '__main__':
     train_loader = torch.utils.data.DataLoader(trainset, batch_size = 150, shuffle=True, num_workers = 1)
     test_loader = torch.utils.data.DataLoader(testset, batch_size = 150, shuffle=True)
     model = FKModule()
-    trainer = pl.Trainer(max_epochs=100,gpus=1,check_val_every_n_epoch=1)
+    trainer = pl.Trainer(max_epochs=20,gpus=1,check_val_every_n_epoch=1)
     trainer.fit(model, train_loader, test_loader)
     
