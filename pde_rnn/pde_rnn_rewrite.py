@@ -141,11 +141,13 @@ class FKModule(pl.LightningModule):
         
         self.metrics = torch.zeros((10,1))
         self.epochs = torch.linspace(0,9,10)
+        
+        self.relu = torch.nn.ReLU()
 
-    def loss(self, xt):
+    def loss(self, xt, coef):
         xs = xt[:,0]
         ts = xt[:,1]
-        coef = torch.rand(1,1,1,4).to(device)
+        coef = coef
         Bx = (xs.unsqueeze(0).unsqueeze(0)+self.B0)
         p0Bx = initial(Bx)
         # calculate values using euler-maruyama
@@ -162,14 +164,14 @@ class FKModule(pl.LightningModule):
         # calculate values using RNN
         input = torch.cat((muBx.unsqueeze(-1),self.dB.unsqueeze(-1),self.dt*torch.ones_like(Bx).unsqueeze(-1)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[0], input.shape[3])
-        rnn_expmart = torch.exp(self.sequence(input_reshaped).reshape(p0Bx.shape))
+        rnn_expmart = self.relu(self.sequence(input_reshaped).reshape(p0Bx.shape))
         u_rnn = (p0Bx*rnn_expmart).mean(1)
         return u_em, u_gir, u_rnn
 
     def training_step(self, batch, batch_idx):
         # REQUIRED
         xt = batch.to(device)
-        u_em, u_gir, u_rnn = self.loss(xt)
+        u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,4).to(device))
         loss = torch.norm((u_rnn-u_gir))/torch.norm(u_gir)
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('train_loss', loss)
@@ -184,7 +186,7 @@ class FKModule(pl.LightningModule):
         #print(loss_total)
         #if torch.rand(1)[0]>0.8:
         xt = batch.to(device)
-        u_em, u_gir, u_rnn = self.loss(xt)
+        u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,4).to(device))
         loss = torch.norm((u_rnn-u_em))/torch.norm(u_em)
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('val_loss', loss)
@@ -204,6 +206,8 @@ class FKModule(pl.LightningModule):
         plt.legend()
         plt.savefig('/scratch/xx84/girsanov/pde_rnn/xts.png')
         plt.clf()
+        
+        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/rnn.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):

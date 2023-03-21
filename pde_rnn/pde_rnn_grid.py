@@ -45,6 +45,12 @@ def initial_val(x):
 def r_value():
     return 1
 
+def heatmap2d(arr: np.ndarray):
+    plt.imshow(arr, cmap='viridis')
+    plt.colorbar()
+    plt.savefig('/scratch/xx84/girsanov/pde_rnn/rnn.png')
+    plt.clf()
+
 class Swish(nn.Module):
     def __init__(self):
         super().__init__()
@@ -107,23 +113,23 @@ class RNN(nn.Module):
 
 
 class FKModule(pl.LightningModule):
-    def __init__(self, N = 1000, lr = 1e-3, X = 1., T = 0.1, batch_size = 100):
+    def __init__(self, N = 500, lr = 1e-3, X = 1., T = 0.1, batch_size = 100):
         super().__init__()
         # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
-        self.num_time = 50
+        self.num_time = 100
         self.T = T
         self.t = torch.linspace(0,1,steps=self.num_time)* self.T
 
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = 3
         # hidden_size is dimension of the RNN output
-        hidden_size = 40
+        hidden_size = 20
         # num_layers is the number of RNN blocks
         num_layers = 2
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = 1
         self.sequence = RNN(input_size, hidden_size, num_layers, num_outputs)
-        #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
+        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn.pt'))
 
         # define the learning rate
         self.lr = lr
@@ -141,11 +147,12 @@ class FKModule(pl.LightningModule):
         
         self.metrics = torch.zeros((10,1))
         self.epochs = torch.linspace(0,9,10)
+        self.relu = torch.nn.ReLU()
 
-    def loss(self, xt):
+    def loss(self, xt, coef):
         xs = xt[:,0]
         ts = xt[:,1]
-        coef = torch.rand(1,1,1,4).to(device)
+        coef = coef
         Bx = (xs.unsqueeze(0).unsqueeze(0)+self.B0)
         p0Bx = initial(Bx)
         # calculate values using euler-maruyama
@@ -162,14 +169,14 @@ class FKModule(pl.LightningModule):
         # calculate values using RNN
         input = torch.cat((muBx.unsqueeze(-1),self.dB.unsqueeze(-1),self.dt*torch.ones_like(Bx).unsqueeze(-1)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[0], input.shape[3])
-        rnn_expmart = torch.exp(self.sequence(input_reshaped).reshape(p0Bx.shape))
+        rnn_expmart = self.relu(self.sequence(input_reshaped).reshape(p0Bx.shape))
         u_rnn = (p0Bx*rnn_expmart).mean(1)
         return u_em, u_gir, u_rnn
 
     def training_step(self, batch, batch_idx):
         # REQUIRED
         xt = batch.to(device)
-        u_em, u_gir, u_rnn = self.loss(xt)
+        u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,4).to(device))
         loss = torch.norm((u_rnn-u_gir))/torch.norm(u_gir)
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('train_loss', loss)
@@ -184,7 +191,7 @@ class FKModule(pl.LightningModule):
         #print(loss_total)
         #if torch.rand(1)[0]>0.8:
         xt = batch.to(device)
-        u_em, u_gir, u_rnn = self.loss(xt)
+        u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,4).to(device))
         loss = torch.norm((u_rnn-u_em))/torch.norm(u_em)
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('val_loss', loss)
@@ -214,7 +221,7 @@ class FKModule(pl.LightningModule):
 
 
 if __name__ == '__main__':
-    pl.seed_everything(1234)
+    pl.seed_everything(1235)
     print(sys.executable)
     #dataset = MNIST(os.getcwd(), train=True, download=True, transform=transforms.ToTensor())
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
@@ -222,17 +229,17 @@ if __name__ == '__main__':
     device = torch.device("cuda:0")
     
     X = 0.5
-    T = 0.01
-    num_samples = 4080
-    batch_size = 80
-    xs = torch.rand(num_samples,1) * X
+    T = 0.02
+    num_samples = 50
+    batch_size = 50
+    xs = torch.linspace(0, 1, 50).unsqueeze(-1) * X
     ts = torch.rand(num_samples,1) * T
     dataset = torch.cat((xs,ts),dim=1)
-    data_train = dataset[:4000,:]
-    data_val = dataset[4000:,:]
+    data_train = dataset[:,:]
+    data_val = dataset[:,:]
     
     train_kwargs = {'batch_size': batch_size,
-            'shuffle': True,
+            'shuffle': False,
             'num_workers': 4}
 
     test_kwargs = {'batch_size': batch_size,
