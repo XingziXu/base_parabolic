@@ -27,8 +27,17 @@ D_IDX = -1
 T_IDX = -2
 N_IDX =  0
 
-def drift(x,t):
-    return (x**2)*t
+def drift(coef, x, t):
+    x = np.expand_dims(x,axis=2)
+    t = t * np.ones_like(x)
+    x0 = x ** 0
+    x1 = x ** 1
+    x2 = x ** 2
+    x3 = x ** 3
+    t1 = t ** 1
+    t2 = t ** 2
+    vals = np.concatenate((x0,x1,x2,x3,t1,t2),axis=2)
+    return (np.expand_dims(coef.numpy(), axis=0) * vals).sum(-1)
 def diffusion(x,t):
     return 1
 def initial(x,t):
@@ -38,7 +47,7 @@ def r_value():
 
 
 class PDETask:
-    def __init__(self, num_data=int(1e4)):
+    def __init__(self, num_data=int(200), coef = torch.rand(1, 6) * 0.3):
         self.num_data = num_data
         self.num_path = 1000 # simulate 500 runs of brownian motion
         self.num_time = 50 # simulate brownian motion with 500 time steps
@@ -46,12 +55,13 @@ class PDETask:
         self.t_init = 0
         self.t_end = 0.01 # define the ending time
         self.x_init = 0
-        self.x_end = 1 # define the ending position
+        self.x_end = 1. # define the ending position
         self.t = np.linspace(self.t_init,self.t_end,num=self.num_time) # define the time
         self.x_init = np.linspace(self.x_init,self.x_end,num=self.num_pos) # define the position
         self.dt = self.t[1]-self.t[0] # define time step
         self.dB = np.sqrt(self.dt) * np.random.randn(self.num_path,self.num_pos,self.num_time)
         self.dB[:,:,0] = 0
+        self.coef = coef
 
 
     def sample(self):
@@ -63,7 +73,7 @@ class PDETask:
         for i in range(1, ts.size):
             t = self.t_init + (i - 1) * self.dt
             x = xs[:,:,i-1]
-            xs[:,:,i] = x + drift(x, t) * self.dt + diffusion(x, t) * self.dB[:,:,i]
+            xs[:,:,i] = x + drift(self.coef, x, t) * self.dt + diffusion(x, t) * self.dB[:,:,i]
         exponential=np.exp(-r_value()*np.repeat(ts[np.newaxis,...], 200,axis=0))
         ini_expectation = np.mean(initial(xs,ts_expanded),axis=0)
         data = exponential * ini_expectation
@@ -84,7 +94,7 @@ class PDEPlot:
         self.t_init = 0
         self.t_end = 0.01 # define the ending time
         self.x_init = 0
-        self.x_end = 1 # define the ending position
+        self.x_end = 1. # define the ending position
         self.t = np.linspace(self.t_init,self.t_end,num=self.num_time) # define the time
         self.x_init = np.linspace(self.x_init,self.x_end,num=self.num_pos) # define the position
         self.dt = self.t[1]-self.t[0] # define time step
@@ -203,6 +213,7 @@ class FKModule(pl.LightningModule):
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = 1
         self.sequence = RNN(input_size, hidden_size, num_layers, num_outputs)
+        #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate
         self.lr = lr
@@ -321,6 +332,10 @@ class FKModule(pl.LightningModule):
         #self.log('val_loss', loss_total)
         #print(loss_total)
         #if torch.rand(1)[0]>0.8:
+        xtu = batch.to(device)
+        loss_total = self.loss(xtu)
+        #tensorboard_logs = {'train_loss': loss_prior}
+        self.log('val_loss', loss_total)
         """
         if self.trainer.current_epoch% 10 == 0:
             x_vals = torch.unsqueeze(torch.tensor(self.x[1:]).repeat_interleave(len(self.t[1:])), 1)
@@ -359,42 +374,29 @@ if __name__ == '__main__':
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
-    task = PDETask()
-    dataset = task.sample()
-    dataset1 = dataset[0:9000,:]
-    dataset2 = dataset[9001:,:]
     
-    #plot = PDEPlot()
-    #plot.sample()
-    
-    #sampler_swiss = SwissRoll()
-    #sampler_moon = Moons()
-    #dataset1 = sampler_moon.sample(10000).data.numpy()
-    #dataset2 = sampler_moon.sample(1000).data.numpy()
 
-    #dataset1 = SineWaveTask().training_set(size=101000,noise=0.03)
-    #dataset2 = dataset1[-1000:,:]
-    #dataset1 = dataset1[:-1000,:]
-    #with open('sine.npy', 'wb') as f:
-    #    np.save(f, dataset1)
-
-    train_kwargs = {'batch_size': 256,
+    train_kwargs = {'batch_size': 100,
             'shuffle': True,
             'num_workers': 4}
 
-    test_kwargs = {'batch_size': 500,
+    test_kwargs = {'batch_size': 100,
             'shuffle': False,
             'num_workers': 4}
-    train_loader = torch.utils.data.DataLoader(dataset1,**train_kwargs)
-    val_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
-    #num_sample = 1e4
-    #nx, ny = 200, 200
-    #xy = np.mgrid[:nx,:ny].reshape(2, -1).T
-    #sample = xy.take(np.random.choice(xy.shape[0], num_samples, replace=False), axis=0)
-    #for i in range(num_sample):
-    #    x
-    model = FKModule()
-    trainer = pl.Trainer(max_epochs=100,gpus=1)
-    trainer.fit(model, train_loader, val_loader)
-    #torch.save(model.a.state_dict(), r"/scratch/xx84/GirTL/a_state_swiss_moon.pt")
-    #torch.save(model.forward_sde.state_dict(), r"/scratch/xx84/GirTL/T_state_swiss_moon.pt")
+    
+    val_bpd = []
+    for i in range(0,10):
+        coef = torch.rand(1,6) * 0.3
+        task = PDETask(coef=coef)
+        dataset = task.sample()
+        dataset1 = dataset[0:100,:]
+        dataset2 = dataset[101:,:]
+        
+        train_loader = torch.utils.data.DataLoader(dataset1,**train_kwargs)
+        val_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
+
+        model = FKModule()
+        trainer = pl.Trainer(max_epochs=1,gpus=1)
+        trainer.fit(model, train_loader, val_loader)
+        val_bpd.append(trainer.logged_metrics['val_loss'])
+    print(np.mean(val_bpd))
