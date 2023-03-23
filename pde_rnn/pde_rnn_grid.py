@@ -116,7 +116,7 @@ class FKModule(pl.LightningModule):
     def __init__(self, N = 500, lr = 1e-3, X = 1., T = 0.1, batch_size = 100):
         super().__init__()
         # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
-        self.num_time = 100
+        self.num_time = 200
         self.T = T
         self.t = torch.linspace(0,1,steps=self.num_time)* self.T
 
@@ -125,11 +125,11 @@ class FKModule(pl.LightningModule):
         # hidden_size is dimension of the RNN output
         hidden_size = 20
         # num_layers is the number of RNN blocks
-        num_layers = 2
+        num_layers = 1
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = 1
         self.sequence = RNN(input_size, hidden_size, num_layers, num_outputs)
-        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn.pt'))
+        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_3.pt'))
 
         # define the learning rate
         self.lr = lr

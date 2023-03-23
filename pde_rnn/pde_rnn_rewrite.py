@@ -107,22 +107,23 @@ class RNN(nn.Module):
 
 
 class FKModule(pl.LightningModule):
-    def __init__(self, N = 1000, lr = 1e-3, X = 1., T = 0.1, batch_size = 100):
+    def __init__(self, N = 500, lr = 5e-3, X = 1., T = 0.1, batch_size = 100):
         super().__init__()
         # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
-        self.num_time = 50
+        self.num_time = 300
         self.T = T
         self.t = torch.linspace(0,1,steps=self.num_time)* self.T
 
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = 3
         # hidden_size is dimension of the RNN output
-        hidden_size = 40
+        hidden_size = 20
         # num_layers is the number of RNN blocks
-        num_layers = 2
+        num_layers = 1
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = 1
         self.sequence = RNN(input_size, hidden_size, num_layers, num_outputs)
+        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_2.pt'))
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate
@@ -139,10 +140,10 @@ class FKModule(pl.LightningModule):
         self.B0 = torch.Tensor(self.B0.cumsum(0)).to(device)
         self.dB = torch.Tensor(self.dB).to(device)
         
-        self.metrics = torch.zeros((10,1))
-        self.epochs = torch.linspace(0,9,10)
+        self.metrics = torch.zeros((20,1))
+        self.epochs = torch.linspace(0,19,20)
         
-        self.relu = torch.nn.ReLU()
+        self.relu = torch.nn.Softplus()
 
     def loss(self, xt, coef):
         xs = xt[:,0]
@@ -172,7 +173,7 @@ class FKModule(pl.LightningModule):
         # REQUIRED
         xt = batch.to(device)
         u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,4).to(device))
-        loss = torch.norm((u_rnn-u_gir))/torch.norm(u_gir)
+        loss = torch.norm((u_rnn-u_em))#/torch.norm(u_em)
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('train_loss', loss)
         #print(loss_total)
@@ -207,11 +208,11 @@ class FKModule(pl.LightningModule):
         plt.savefig('/scratch/xx84/girsanov/pde_rnn/xts.png')
         plt.clf()
         
-        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/rnn.pt')
+        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/rnn_3.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.sequence.gru.parameters(), lr=self.lr)
+        optimizer = torch.optim.AdamW(self.sequence.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "train_loss"}
 
@@ -225,15 +226,15 @@ if __name__ == '__main__':
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
     
-    X = 0.5
-    T = 0.01
-    num_samples = 4080
-    batch_size = 80
+    X = 1.0
+    T = 0.03
+    num_samples = 6050
+    batch_size = 50
     xs = torch.rand(num_samples,1) * X
     ts = torch.rand(num_samples,1) * T
     dataset = torch.cat((xs,ts),dim=1)
-    data_train = dataset[:4000,:]
-    data_val = dataset[4000:,:]
+    data_train = dataset[:6000,:]
+    data_val = dataset[6000:,:]
     
     train_kwargs = {'batch_size': batch_size,
             'shuffle': True,
@@ -247,7 +248,7 @@ if __name__ == '__main__':
     val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
     model = FKModule(X=X, T=T, batch_size=batch_size)
-    trainer = pl.Trainer(max_epochs=10,gpus=1)
+    trainer = pl.Trainer(max_epochs=20,gpus=1)
     trainer.fit(model, train_loader, val_loader)
     
     print(trainer.logged_metrics['val_loss'])
