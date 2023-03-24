@@ -23,6 +23,11 @@ import sys
 from random import randint
 import seaborn as sns 
 import pandas as pd
+import time
+
+
+
+
 D_IDX = -1
 T_IDX = -2
 N_IDX =  0
@@ -30,11 +35,11 @@ N_IDX =  0
 def drift(x, coef):
     x = x.unsqueeze(-1)
     x0 = x ** 0
-    x1 = torch.sin(1 * np.pi * x)
-    x2 = torch.sin(2 * np.pi * x)
-    x3 = torch.sin(3 * np.pi * x)
-    vals = torch.cat((x0,x1,x2,x3),axis=-1)
+    x1 = x ** 1
+    x2 = x ** 2
+    vals = torch.cat((x0,x1,x2),axis=-1)
     return (coef * vals).sum(-1)
+
 
 def diffusion(x,t):
     return 1
@@ -113,23 +118,23 @@ class RNN(nn.Module):
 
 
 class FKModule(pl.LightningModule):
-    def __init__(self, N = 500, lr = 1e-3, X = 1., T = 0.1, batch_size = 100):
+    def __init__(self, N = 70, lr = 1e-20, X = 1., T = 0.1, batch_size = 100, num_time = 500):
         super().__init__()
         # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
-        self.num_time = 200
+        self.num_time = num_time
         self.T = T
         self.t = torch.linspace(0,1,steps=self.num_time)* self.T
 
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = 3
         # hidden_size is dimension of the RNN output
-        hidden_size = 20
+        hidden_size = 40
         # num_layers is the number of RNN blocks
-        num_layers = 1
+        num_layers = 2
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = 1
         self.sequence = RNN(input_size, hidden_size, num_layers, num_outputs)
-        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_3.pt'))
+        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn.pt'))
 
         # define the learning rate
         self.lr = lr
@@ -140,14 +145,14 @@ class FKModule(pl.LightningModule):
 
         # define the brwonian motion starting at zero
         self.dB = np.sqrt(self.dt.item()) * np.random.randn(self.t.shape[0], self.N, batch_size)
-        self.dB[:,:,0] = 0 
+        self.dB[0,:,:] = 0 
         self.B0 = self.dB.copy()
         self.B0 = torch.Tensor(self.B0.cumsum(0)).to(device)
         self.dB = torch.Tensor(self.dB).to(device)
         
         self.metrics = torch.zeros((10,1))
         self.epochs = torch.linspace(0,9,10)
-        self.relu = torch.nn.ReLU()
+        self.relu = torch.nn.Softplus()
 
     def loss(self, xt, coef):
         xs = xt[:,0]
@@ -156,65 +161,91 @@ class FKModule(pl.LightningModule):
         Bx = (xs.unsqueeze(0).unsqueeze(0)+self.B0)
         p0Bx = initial(Bx)
         # calculate values using euler-maruyama
+        start_time_em = time.time()
         x = torch.zeros(self.num_time, self.N, batch_size).to(device)
         x[0,:,:] = xs.squeeze()
         for i in range(self.num_time-1):
             x[i+1,:,:] = x[i,:,:] + drift(x[i,:,:], coef).squeeze() * self.dt + self.dB[i,:,:]
         p0mux = initial(x)
         u_em = p0mux.mean(1)
+        end_time_em = time.time()
+        time_em = end_time_em-start_time_em
         # calculate values using girsanov
+        start_time_gir = time.time()
         muBx = drift(Bx, coef)
         expmart = torch.exp(torch.cumsum(muBx*self.dB,dim=0) - 0.5 * torch.cumsum((muBx ** 2) * self.dt,dim=0))
         u_gir = (p0Bx*expmart).mean(1)
+        end_time_gir = time.time()
+        time_gir = end_time_gir-start_time_gir
         # calculate values using RNN
+        start_time_rnn = time.time()
         input = torch.cat((muBx.unsqueeze(-1),self.dB.unsqueeze(-1),self.dt*torch.ones_like(Bx).unsqueeze(-1)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[0], input.shape[3])
         rnn_expmart = self.relu(self.sequence(input_reshaped).reshape(p0Bx.shape))
         u_rnn = (p0Bx*rnn_expmart).mean(1)
-        return u_em, u_gir, u_rnn
+        end_time_rnn = time.time()
+        time_rnn = end_time_rnn-start_time_rnn
+        return u_em, u_gir, u_rnn, time_em, time_gir, time_rnn
 
     def training_step(self, batch, batch_idx):
         # REQUIRED
         xt = batch.to(device)
-        u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,4).to(device))
+        u_em, u_gir, u_rnn, time_em, time_gir, time_rnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
         loss = torch.norm((u_rnn-u_gir))/torch.norm(u_gir)
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('train_loss', loss)
+        self.log('rnn_loss', torch.norm(u_rnn-u_em))
+        self.log('gir_loss', torch.norm(u_gir-u_em))
+        self.log('em_time', time_em)
+        self.log('rnn_time', time_rnn)
+        self.log('gir_time', time_gir)
         #print(loss_total)
         return {'loss': loss}
         
         
     def validation_step(self, batch, batch_idx):
-        #xtu = batch.to(device)
-        #loss_total = self.loss(xtu)
-        #self.log('val_loss', loss_total)
-        #print(loss_total)
-        #if torch.rand(1)[0]>0.8:
-        xt = batch.to(device)
-        u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,4).to(device))
-        loss = torch.norm((u_rnn-u_em))/torch.norm(u_em)
-        #tensorboard_logs = {'train_loss': loss_prior}
-        self.log('val_loss', loss)
-        #print(loss_total)
-        self.metrics[self.current_epoch,:] = loss.item()
-        plt.plot(self.epochs, self.metrics[:,0], label='Val_loss')
-        plt.ylabel('Magnitude')
-        plt.xlabel('Epochs')
-        plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/pde_rnn/muBx.png')
-        plt.clf()
-        
-        plt.plot(u_em[30,:].cpu(), label='em')
-        plt.plot(u_gir[30,:].cpu(), label='girsanov')
-        plt.plot(u_rnn[30,:].cpu(), label='rnn')
-        plt.ylabel('Magnitude')
-        plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/pde_rnn/xts.png')
-        plt.clf()
+        """with torch.no_grad():
+            xt = batch.to(device)
+            coef=torch.rand(1,1,1,3).to(device)
+            xs = xt[:,0]
+            ts = xt[:,1]
+            coef = coef
+            Bx = (xs.unsqueeze(0).unsqueeze(0)+self.B0)
+            p0Bx = initial(Bx)
+            # calculate values using euler-maruyama
+            start_time_em = time.time()
+            x = torch.zeros(self.num_time, self.N, batch_size).to(device)
+            x[0,:,:] = xs.squeeze()
+            for i in range(self.num_time-1):
+                x[i+1,:,:] = x[i,:,:] + drift(x[i,:,:], coef).squeeze() * self.dt + self.dB[i,:,:]
+            p0mux = initial(x)
+            u_em = p0mux.mean(1)
+            end_time_em = time.time()
+            time_em = end_time_em-start_time_em
+            # calculate values using girsanov
+            start_time_gir = time.time()
+            muBx = drift(Bx, coef)
+            expmart = torch.exp(torch.cumsum(muBx*self.dB,dim=0) - 0.5 * torch.cumsum((muBx ** 2) * self.dt,dim=0))
+            u_gir = (p0Bx*expmart).mean(1)
+            end_time_gir = time.time()
+            time_gir = end_time_gir-start_time_gir
+            # calculate values using RNN
+            start_time_rnn = time.time()
+            input = torch.cat((muBx.unsqueeze(-1),self.dB.unsqueeze(-1),self.dt*torch.ones_like(Bx).unsqueeze(-1)),dim=-1)
+            input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[0], input.shape[3])
+            rnn_expmart = self.relu(self.sequence(input_reshaped).reshape(p0Bx.shape))
+            u_rnn = (p0Bx*rnn_expmart).mean(1)
+            end_time_rnn = time.time()
+            time_rnn = end_time_rnn-start_time_rnn
+            self.log('rnn_loss', torch.norm(u_rnn-u_em))
+            self.log('gir_loss', torch.norm(u_gir-u_em))
+            self.log('em_time', time_em)
+            self.log('rnn_time', time_rnn)
+            self.log('gir_time', time_gir)"""
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.sequence.gru.parameters(), lr=self.lr)
+        optimizer = torch.optim.AdamW(self.sequence.fc.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "train_loss"}
 
@@ -227,31 +258,60 @@ if __name__ == '__main__':
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
-    
-    X = 0.5
-    T = 0.02
-    num_samples = 50
-    batch_size = 50
-    xs = torch.linspace(0, 1, 50).unsqueeze(-1) * X
-    ts = torch.rand(num_samples,1) * T
-    dataset = torch.cat((xs,ts),dim=1)
-    data_train = dataset[:,:]
-    data_val = dataset[:,:]
-    
-    train_kwargs = {'batch_size': batch_size,
-            'shuffle': False,
-            'num_workers': 4}
+    val_rnn = []
+    val_gir = []
+    time_em = []
+    time_gir = []
+    time_rnn = []
+    Ts = []
+    for i in range(31, 71):
+        
+        X = 1.0
+        T = 0.005 * i
+        num_samples = 50
+        batch_size = 50
+        N = 50
+        num_time = 25 * i
+        xs = torch.linspace(0, 1, 50).unsqueeze(-1) * X
+        ts = torch.rand(num_samples,1) * T
+        dataset = torch.cat((xs,ts),dim=1)
+        data_train = dataset[:,:]
+        data_val = dataset[:,:]
+        
+        train_kwargs = {'batch_size': batch_size,
+                'shuffle': False,
+                'num_workers': 4}
 
-    test_kwargs = {'batch_size': batch_size,
-            'shuffle': False,
-            'num_workers': 4}
+        test_kwargs = {'batch_size': batch_size,
+                'shuffle': False,
+                'num_workers': 4}
 
-    train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
-    val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
+        train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
+        val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
-    model = FKModule(X=X, T=T, batch_size=batch_size)
-    trainer = pl.Trainer(max_epochs=10,gpus=1)
-    trainer.fit(model, train_loader, val_loader)
-    
-    print(trainer.logged_metrics['val_loss'])
-    print(trainer.logged_metrics['train_loss'])
+        model = FKModule(X=X, T=T, num_time = num_time, N=N, batch_size=batch_size)
+        trainer = pl.Trainer(max_epochs=1,gpus=1)
+        trainer.fit(model, train_loader, val_loader)
+        Ts.append(T)
+        val_rnn.append(trainer.logged_metrics['rnn_loss'].item())
+        val_gir.append(trainer.logged_metrics['gir_loss'].item())
+        time_em.append(trainer.logged_metrics['em_time'].item())
+        time_gir.append(trainer.logged_metrics['gir_time'].item())
+        time_rnn.append(trainer.logged_metrics['rnn_time'].item())
+    plt.plot(Ts, val_rnn, label='rnn')
+    plt.plot(Ts, val_gir, label='girsanov')
+    plt.xlabel('Time')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.savefig('/scratch/xx84/girsanov/pde_rnn/loss_time.png')
+    plt.clf()
+    plt.plot(Ts, time_em, label='em')
+    plt.plot(Ts, time_gir, label='girsanov')
+    plt.plot(Ts, time_rnn, label='rnn')
+    plt.xlabel('Time')
+    plt.ylabel('Computational Time')
+    plt.legend()
+    plt.savefig('/scratch/xx84/girsanov/pde_rnn/comptime_time.png')
+    plt.clf()
+    #print(trainer.logged_metrics['val_loss'])
+    #print(trainer.logged_metrics['train_loss'])
