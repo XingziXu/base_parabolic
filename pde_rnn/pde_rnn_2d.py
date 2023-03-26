@@ -106,17 +106,17 @@ class RNN(nn.Module):
 
 
 class FKModule(pl.LightningModule):
-    def __init__(self, N = 1000, lr = 1e-3, X = 1., T = 0.1, dim = 2, batch_size = 100):
+    def __init__(self, N = 1000, lr = 1e-3, X = 1., T = 0.1, dim = 2, batch_size = 100, num_time = 100):
         super().__init__()
         # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
-        self.num_time = 50
+        self.num_time = num_time
         self.T = T
         self.t = torch.linspace(0,1,steps=self.num_time)* self.T
         self.dim = dim
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = self.dim * 2 + 1
         # hidden_size is dimension of the RNN output
-        hidden_size = 40
+        hidden_size = 100
         # num_layers is the number of RNN blocks
         num_layers = 2
         # num_outputs is the number of ln(rho(x,t))
@@ -171,7 +171,7 @@ class FKModule(pl.LightningModule):
         # REQUIRED
         xt = batch.to(device)
         u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
-        loss = torch.norm((u_rnn-u_gir))/torch.norm(u_gir)
+        loss = torch.norm((u_rnn-u_em))/torch.norm(u_gir)
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('train_loss', loss)
         #print(loss_total)
@@ -197,7 +197,7 @@ class FKModule(pl.LightningModule):
         plt.legend()
         plt.savefig('/scratch/xx84/girsanov/pde_rnn/muBx_2d.png')
         plt.clf()
-        
+        """
         plt.plot(u_em[30,:].cpu(), label='em')
         plt.plot(u_gir[30,:].cpu(), label='girsanov')
         plt.plot(u_rnn[30,:].cpu(), label='rnn')
@@ -205,8 +205,8 @@ class FKModule(pl.LightningModule):
         plt.legend()
         plt.savefig('/scratch/xx84/girsanov/pde_rnn/xts_2d.png')
         plt.clf()
-        
-        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/rnn_2d.pt')
+        """
+        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/rnn_10d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -226,28 +226,30 @@ if __name__ == '__main__':
     
     X = 0.5
     T = 0.01
-    dim = 2
-    num_samples = 6080
-    batch_size = 80
+    num_time = 50
+    dim = 10
+    num_samples = 20025
+    batch_size = 25
+    N = 1000
     xs = torch.rand(num_samples,dim) * X
     ts = torch.rand(num_samples,1) * T
     dataset = torch.cat((xs,ts),dim=1)
-    data_train = dataset[:6000,:]
-    data_val = dataset[6000:,:]
+    data_train = dataset[:20000,:]
+    data_val = dataset[20000:,:]
     
     train_kwargs = {'batch_size': batch_size,
             'shuffle': True,
-            'num_workers': 4}
+            'num_workers': 1}
 
     test_kwargs = {'batch_size': batch_size,
             'shuffle': False,
-            'num_workers': 4}
+            'num_workers': 1}
 
     train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
     val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
-    model = FKModule(X=X, T=T, batch_size=batch_size, dim=dim)
-    trainer = pl.Trainer(max_epochs=10,gpus=1)
+    model = FKModule(X=X, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N)
+    trainer = pl.Trainer(max_epochs=50,gpus=1)
     trainer.fit(model, train_loader, val_loader)
     
     print(trainer.logged_metrics['val_loss'])

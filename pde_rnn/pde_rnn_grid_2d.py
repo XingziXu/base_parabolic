@@ -23,6 +23,8 @@ import sys
 from random import randint
 import seaborn as sns 
 import pandas as pd
+import time
+
 D_IDX = -1
 T_IDX = -2
 N_IDX =  0
@@ -106,22 +108,23 @@ class RNN(nn.Module):
 
 
 class FKModule(pl.LightningModule):
-    def __init__(self, N = 1000, lr = 1e-3, X = 1., T = 0.1, dim = 2, batch_size = 100):
+    def __init__(self, N = 1000, lr = 1e-3, X = 1., num_time = 50, T = 0.1, dim = 2, batch_size = 100):
         super().__init__()
         # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
-        self.num_time = 50
+        self.num_time = num_time
         self.T = T
         self.t = torch.linspace(0,1,steps=self.num_time)* self.T
         self.dim = dim
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = self.dim * 2 + 1
         # hidden_size is dimension of the RNN output
-        hidden_size = 40
+        hidden_size = 100
         # num_layers is the number of RNN blocks
         num_layers = 2
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
         self.sequence = RNN(input_size, hidden_size, num_layers, num_outputs)
+        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_20d.pt'))
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate
@@ -150,36 +153,49 @@ class FKModule(pl.LightningModule):
         Bx = (xs.unsqueeze(0).unsqueeze(0)+self.B0)
         p0Bx = initial(Bx)
         # calculate values using euler-maruyama
+        start_time_em = time.time()
         x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
         x[0,:,:,:] = xs.squeeze()
         for i in range(self.num_time-1):
             x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef).squeeze() * self.dt + self.dB[i,:,:,:]
         p0mux = initial(x)
         u_em = p0mux.mean(1)
+        end_time_em = time.time()
+        time_em = end_time_em-start_time_em
         # calculate values using girsanov
+        start_time_gir = time.time()
         muBx = drift(Bx, coef)
         expmart = torch.exp(torch.cumsum(muBx*self.dB,dim=0) - 0.5 * torch.cumsum((muBx ** 2) * self.dt,dim=0))
         u_gir = (p0Bx*expmart).mean(1)
+        end_time_gir = time.time()
+        time_gir = end_time_gir-start_time_gir
         # calculate values using RNN
+        start_time_rnn = time.time()
         input = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[0], input.shape[3])
         rnn_expmart = self.relu(self.sequence(input_reshaped).reshape(p0Bx.shape))
         u_rnn = (p0Bx*rnn_expmart).mean(1)
-        return u_em, u_gir, u_rnn
+        end_time_rnn = time.time()
+        time_rnn = end_time_rnn-start_time_rnn
+        return u_em, u_gir, u_rnn, time_em, time_gir, time_rnn
 
     def training_step(self, batch, batch_idx):
         # REQUIRED
         xt = batch.to(device)
-        u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
-        loss = torch.norm((u_rnn-u_gir))/torch.norm(u_gir)
+        u_em, u_gir, u_rnn, time_em, time_gir, time_rnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
+        loss = torch.norm((u_rnn-u_em))/torch.norm(u_em)
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('train_loss', loss)
-        #print(loss_total)
+        self.log('rnn_loss', torch.norm(u_rnn-u_em)/torch.norm(u_em))
+        self.log('gir_loss', torch.norm(u_gir-u_em)/torch.norm(u_em))
+        self.log('em_time', time_em)
+        self.log('rnn_time', time_rnn)
+        self.log('gir_time', time_gir)
         return {'loss': loss}
         
         
     def validation_step(self, batch, batch_idx):
-        #xtu = batch.to(device)
+        """#xtu = batch.to(device)
         #loss_total = self.loss(xtu)
         #self.log('val_loss', loss_total)
         #print(loss_total)
@@ -206,7 +222,7 @@ class FKModule(pl.LightningModule):
         plt.savefig('/scratch/xx84/girsanov/pde_rnn/xts_2d.png')
         plt.clf()
         
-        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/rnn_2d.pt')
+        #torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/rnn_2d.pt')"""
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -231,13 +247,14 @@ if __name__ == '__main__':
     Ts = []
     for i in range(31, 71):
         
-        X = 1.0
+        X = 0.5
         T = 0.005 * i
-        num_samples = 50
-        batch_size = 50
+        num_samples = 20
+        batch_size = 20
         N = 50
         num_time = 25 * i
-        xs = torch.linspace(0, 1, 50).unsqueeze(-1) * X
+        dim = 20
+        xs = torch.rand(num_samples,dim) * X
         ts = torch.rand(num_samples,1) * T
         dataset = torch.cat((xs,ts),dim=1)
         data_train = dataset[:,:]
@@ -254,7 +271,7 @@ if __name__ == '__main__':
         train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
         val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
-        model = FKModule(X=X, T=T, num_time = num_time, N=N, batch_size=batch_size)
+        model = FKModule(X=X, T=T, num_time = num_time, N=N, dim=dim, batch_size=batch_size)
         trainer = pl.Trainer(max_epochs=1,gpus=1)
         trainer.fit(model, train_loader, val_loader)
         Ts.append(T)
@@ -268,7 +285,7 @@ if __name__ == '__main__':
     plt.xlabel('Time')
     plt.ylabel('Loss')
     plt.legend()
-    plt.savefig('/scratch/xx84/girsanov/pde_rnn/loss_time.png')
+    plt.savefig('/scratch/xx84/girsanov/pde_rnn/loss_time_2d.png')
     plt.clf()
     plt.plot(Ts, time_em, label='em')
     plt.plot(Ts, time_gir, label='girsanov')
@@ -276,7 +293,7 @@ if __name__ == '__main__':
     plt.xlabel('Time')
     plt.ylabel('Computational Time')
     plt.legend()
-    plt.savefig('/scratch/xx84/girsanov/pde_rnn/comptime_time.png')
+    plt.savefig('/scratch/xx84/girsanov/pde_rnn/comptime_time_2d.png')
     plt.clf()
     #print(trainer.logged_metrics['val_loss'])
     #print(trainer.logged_metrics['train_loss'])
