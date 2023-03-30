@@ -245,7 +245,7 @@ if __name__ == '__main__':
     time_gir = []
     time_rnn = []
     Ts = []
-    for i in range(31, 71):
+    for i in range(2, 30):
         
         X = 0.5
         T = 0.005 * i
