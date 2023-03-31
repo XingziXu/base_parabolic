@@ -23,9 +23,9 @@ import sys
 from random import randint
 import seaborn as sns 
 import pandas as pd
-D_IDX = -1
-T_IDX = -2
-N_IDX =  0
+from neuralop.models import TFNO
+
+
 
 def drift(x, coef):
     x = x.unsqueeze(-1)
@@ -44,128 +44,21 @@ def initial_val(x):
 def r_value():
     return 1
 
-class Swish(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x): 
-        return torch.sigmoid(x)*x
-
-class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super().__init__()
-
-        self.act = Swish()
-        self.input_fc = nn.Linear(input_dim, hidden_dim)
-        self.hidden_fc = nn.Linear(hidden_dim, hidden_dim)
-        self.output_fc = nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, x):
-        batch_size = x.shape[0]
-        x = x.view(batch_size, -1)
-        h_1 = F.tanh(self.input_fc(x))
-        h_2 = F.tanh(self.hidden_fc(h_1))
-        y_pred = self.output_fc(h_2)
-        return y_pred
-
-class RNN(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, num_outputs):
-        super(RNN, self).__init__()
-        self.num_layers = num_layers
-        self.hidden_size = hidden_size
-        self.gru = nn.GRU(input_size, hidden_size, num_layers, batch_first=True)
-        # -> x needs to be: (batch_size, seq, input_size)
-        
-        # or:
-        #self.gru = nn.GRU(input_size, hidden_size, num_layers, batch_first=True)
-        #self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, num_outputs)
-        
-    def forward(self, x):
-        # Set initial hidden states (and cell states for LSTM)
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(device) 
-        #c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(device) 
-        
-        # x: (n, seq, input_size), h0: (num_layers, n, hidden_size)
-        
-        # Forward propagate RNN
-        out, _ = self.gru(x.to(h0), h0)  
-        # or:
-        #out, _ = self.lstm(x, (h0,c0))  
-        
-        # out: tensor of shape (batch_size, seq_length, hidden_size)
-        # out: (n, seq_length, hidden_size)
-        
-        # Decode the hidden state of the last time step
-        #out = out[:, -1, :]
-        # out: (n, hidden_size)
-         
-        out = self.fc(out)
-        # out: (n, dimension of rho(x,t))
-        return out
-
 
 class FKModule(pl.LightningModule):
-    def __init__(self, N = 1000, lr = 1e-3, X = 1., T = 0.1, dim = 2, batch_size = 100, num_time = 100):
+    def __init__(self, lr = 1e-3, dim = 2, batch_size = 100, res_spa=50):
         super().__init__()
-        # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
-        self.num_time = num_time
-        self.T = T
-        self.t = torch.linspace(0,1,steps=self.num_time)* self.T
-        self.dim = dim
-        # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
-        input_size = self.dim * 2 + 1
-        # hidden_size is dimension of the RNN output
-        hidden_size = 100
-        # num_layers is the number of RNN blocks
-        num_layers = 2
-        # num_outputs is the number of ln(rho(x,t))
-        num_outputs = self.dim
-        self.sequence = RNN(input_size, hidden_size, num_layers, num_outputs)
-        #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
-
-        # define the learning rate
-        self.lr = lr
-                
-        # define number of paths used and grid of PDE
-        self.N = N
-        self.dt = self.t[1]-self.t[0] # define time step
-
-        # define the brwonian motion starting at zero
-        self.dB = np.sqrt(self.dt.item()) * np.random.randn(self.t.shape[0], self.N, batch_size, self.dim)
-        self.dB[0,:,:,:] = 0 
-        self.B0 = self.dB.copy()
-        self.B0 = torch.Tensor(self.B0.cumsum(0)).to(device)
-        self.dB = torch.Tensor(self.dB).to(device)
+        
         
         self.metrics = torch.zeros((50,1))
         self.epochs = torch.linspace(0,49,50)
-        
-        self.relu = torch.nn.Softplus()
+        operator = TFNO(n_modes=(16, 16), hidden_channels=64,
+                in_channels=3, out_channels=1)
+        self.fno = TFNO(n_modes=(16, 16), in_channels=1, hidden_channels=32, out_channels=1, projection_channels=64, factorization='tucker', rank=0.42)
 
     def loss(self, xt, coef):
-        xs = xt[:,:-1]
-        ts = xt[:,-1]
-        coef = coef
-        Bx = (xs.unsqueeze(0).unsqueeze(0)+self.B0)
-        p0Bx = initial(Bx)
-        # calculate values using euler-maruyama
-        x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
-        x[0,:,:,:] = xs.squeeze()
-        for i in range(self.num_time-1):
-            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef).squeeze() * self.dt + self.dB[i,:,:,:]
-        p0mux = initial(x)
-        u_em = p0mux.mean(1)
-        # calculate values using girsanov
-        muBx = drift(Bx, coef)
-        expmart = torch.exp(torch.cumsum(muBx*self.dB,dim=0) - 0.5 * torch.cumsum((muBx ** 2) * self.dt,dim=0))
-        u_gir = (p0Bx*expmart).mean(1)
-        # calculate values using RNN
-        input = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
-        input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[0], input.shape[3])
-        rnn_expmart = self.relu(self.sequence(input_reshaped).reshape(p0Bx.shape))
-        u_rnn = (p0Bx*rnn_expmart).mean(1)
-        return u_em, u_gir, u_rnn
+
+        return 
 
     def training_step(self, batch, batch_idx):
         # REQUIRED
@@ -179,34 +72,7 @@ class FKModule(pl.LightningModule):
         
         
     def validation_step(self, batch, batch_idx):
-        #xtu = batch.to(device)
-        #loss_total = self.loss(xtu)
-        #self.log('val_loss', loss_total)
-        #print(loss_total)
-        #if torch.rand(1)[0]>0.8:
-        xt = batch.to(device)
-        u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
-        loss = torch.norm((u_rnn-u_em))/torch.norm(u_em)
-        #tensorboard_logs = {'train_loss': loss_prior}
-        self.log('val_loss', loss)
-        #print(loss_total)
-        self.metrics[self.current_epoch,:] = loss.item()
-        plt.plot(self.epochs, self.metrics[:,0], label='Val_loss')
-        plt.ylabel('Magnitude')
-        plt.xlabel('Epochs')
-        plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/pde_rnn/muBx_2d.png')
-        plt.clf()
-        """
-        plt.plot(u_em[30,:].cpu(), label='em')
-        plt.plot(u_gir[30,:].cpu(), label='girsanov')
-        plt.plot(u_rnn[30,:].cpu(), label='rnn')
-        plt.ylabel('Magnitude')
-        plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/pde_rnn/xts_2d.png')
-        plt.clf()
-        """
-        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/rnn_10d.pt')
+
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -222,20 +88,34 @@ if __name__ == '__main__':
     #dataset = MNIST(os.getcwd(), train=True, download=True, transform=transforms.ToTensor())
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
-    device = torch.device("cuda:0")
+    device = torch.device("cpu")
     
     X = 0.5
-    T = 0.01
-    num_time = 50
+    T = 0.2
+    #num_time = 50
     dim = 10
-    num_samples = 20025
+    res_spa = 16
+    res_time = 60
     batch_size = 25
     N = 1000
-    xs = torch.rand(num_samples,dim) * X
-    ts = torch.rand(num_samples,1) * T
-    dataset = torch.cat((xs,ts),dim=1)
-    data_train = dataset[:20000,:]
-    data_val = dataset[20000:,:]
+    xs = torch.linspace(0., 1., res_spa).unsqueeze(1).repeat(1,dim) * X
+    ts = torch.linspace(0., 1., res_time).unsqueeze(1) * T
+    dt = ts[0,0]-ts[1,0]
+    coef=torch.rand(1,1,1,3).to(device)
+    dB = np.sqrt(dt.item()) * np.random.randn(ts.shape[0], N, res_spa, dim)
+    dB[0,:,:,:] = 0 
+    B0 = dB.copy()
+    B0 = torch.Tensor(B0.cumsum(0)).to(device)
+    dB = torch.Tensor(dB).to(device)
+    Bx = (xs.unsqueeze(0).unsqueeze(0)+B0)
+    p0Bx = initial(Bx)
+    muBx = drift(Bx, coef)
+    expmart = torch.exp(torch.cumsum(muBx*dB,dim=0) - 0.5 * torch.cumsum((muBx ** 2) * dt,dim=0))
+    u_gir = (p0Bx*expmart).mean(1)
+    
+    #dataset = torch.cat((xs,ts),dim=0)
+    data_train = u_gir[:50,:,:,:]
+    data_val = u_gir[51:,:,:,:]
     
     train_kwargs = {'batch_size': batch_size,
             'shuffle': True,
@@ -248,7 +128,7 @@ if __name__ == '__main__':
     train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
     val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
-    model = FKModule(X=X, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N)
+    model = FKModule(batch_size=batch_size, dim=dim, res_spa=res_spa)
     trainer = pl.Trainer(max_epochs=50,gpus=1)
     trainer.fit(model, train_loader, val_loader)
     

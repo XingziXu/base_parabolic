@@ -38,7 +38,7 @@ def drift(x, coef):
 def diffusion(x,t):
     return 1
 def initial(x):
-    return torch.sin(6*np.pi*x)
+    return torch.sin(6*np.pi*x).sum(-1)
 def initial_val(x):
     return torch.sin(1*np.pi*x)
 def r_value():
@@ -63,78 +63,32 @@ class MLP(nn.Module):
     def forward(self, x):
         batch_size = x.shape[0]
         x = x.view(batch_size, -1)
-        h_1 = F.tanh(self.input_fc(x))
-        h_2 = F.tanh(self.hidden_fc(h_1))
+        h_1 = torch.tanh(self.input_fc(x))
+        h_2 = torch.tanh(self.hidden_fc(h_1))
         y_pred = self.output_fc(h_2)
         return y_pred
 
-class RNN(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, num_outputs):
-        super(RNN, self).__init__()
-        self.num_layers = num_layers
-        self.hidden_size = hidden_size
-        self.gru = nn.GRU(input_size, hidden_size, num_layers, batch_first=True)
-        # -> x needs to be: (batch_size, seq, input_size)
-        
-        # or:
-        #self.gru = nn.GRU(input_size, hidden_size, num_layers, batch_first=True)
-        #self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, num_outputs)
-        
-    def forward(self, x):
-        # Set initial hidden states (and cell states for LSTM)
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(device) 
-        #c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(device) 
-        
-        # x: (n, seq, input_size), h0: (num_layers, n, hidden_size)
-        
-        # Forward propagate RNN
-        out, _ = self.gru(x.to(h0), h0)  
-        # or:
-        #out, _ = self.lstm(x, (h0,c0))  
-        
-        # out: tensor of shape (batch_size, seq_length, hidden_size)
-        # out: (n, seq_length, hidden_size)
-        
-        # Decode the hidden state of the last time step
-        #out = out[:, -1, :]
-        # out: (n, hidden_size)
-         
-        out = self.fc(out)
-        # out: (n, dimension of rho(x,t))
-        return out
-
-
 class FKModule(pl.LightningModule):
-    def __init__(self, N = 1000, lr = 1e-3, X = 1., T = 0.1, dim = 2, batch_size = 100, num_time = 100):
+    def __init__(self, m=100, dim=10, p=15, batch_size = 100, lr=1e-3, X=1.0, T=1.0, N=1000, num_time=50):
         super().__init__()
-        # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
         self.num_time = num_time
-        self.T = T
+        self.N = N # number of instances we estimate our PDE solutions with
+        self.X = X # interval size
+        self.T = T # time interval size
+        self.m = m # number of "sensors" for the function u
+        self.dim = dim # number of dimension of x
+        self.p = p # number of "branches"
+        self.lr = lr # learning rate
+        self.sensors = initial(torch.linspace(0., 1., self.m).unsqueeze(-1).repeat(1,self.dim) * self.X)
+        self.batch_size = batch_size
+        
+        self.branch = MLP(input_dim=self.m, hidden_dim=100, output_dim=self.p) # branch network
+        self.trunk = MLP(input_dim=dim+1, hidden_dim=16, output_dim=self.p) # trunk network
+        
         self.t = torch.linspace(0,1,steps=self.num_time)* self.T
-        self.dim = dim
-        # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
-        input_size = self.dim * 2 + 1
-        # hidden_size is dimension of the RNN output
-        hidden_size = 100
-        # num_layers is the number of RNN blocks
-        num_layers = 2
-        # num_outputs is the number of ln(rho(x,t))
-        num_outputs = self.dim
-        self.sequence = RNN(input_size, hidden_size, num_layers, num_outputs)
-        m = 100
-        dim_x = 1
-        #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
-
-        # define the learning rate
-        self.lr = lr
-                
-        # define number of paths used and grid of PDE
-        self.N = N
         self.dt = self.t[1]-self.t[0] # define time step
-
         # define the brwonian motion starting at zero
-        self.dB = np.sqrt(self.dt.item()) * np.random.randn(self.t.shape[0], self.N, batch_size, self.dim)
+        self.dB = np.sqrt(self.dt.item()) * np.random.randn(self.t.shape[0], self.N, self.batch_size, self.dim)
         self.dB[0,:,:,:] = 0 
         self.B0 = self.dB.copy()
         self.B0 = torch.Tensor(self.B0.cumsum(0)).to(device)
@@ -142,8 +96,6 @@ class FKModule(pl.LightningModule):
         
         self.metrics = torch.zeros((50,1))
         self.epochs = torch.linspace(0,49,50)
-        
-        self.relu = torch.nn.Softplus()
 
     def loss(self, xt, coef):
         xs = xt[:,:-1]
@@ -151,56 +103,31 @@ class FKModule(pl.LightningModule):
         coef = coef
         Bx = (xs.unsqueeze(0).unsqueeze(0)+self.B0)
         p0Bx = initial(Bx)
-        # calculate values using girsanov
         muBx = drift(Bx, coef)
-        expmart = torch.exp(torch.cumsum(muBx*self.dB,dim=0) - 0.5 * torch.cumsum((muBx ** 2) * self.dt,dim=0))
+        expmart = torch.exp(torch.cumsum((muBx*self.dB).sum(-1),dim=0) - 0.5 * torch.cumsum(((muBx ** 2).sum(-1)) * self.dt,dim=0))
         u_gir = (p0Bx*expmart).mean(1)
-        return u_gir
+        branchs = self.branch(self.sensors.unsqueeze(0)).repeat(self.batch_size, 1)
+        pred = torch.zeros_like(u_gir)
+
+        u_gir_selected = torch.zeros(self.batch_size)
+        for i in (0,self.batch_size-1):
+            u_gir_selected[i] = u_gir[int(ts[i]),i]
+        trunks = self.trunk(torch.cat((xs,ts.unsqueeze(1)*self.dt),dim=1))
+        pred = (branchs * trunks).sum(1)
+        return torch.norm(pred-u_gir_selected, p=1)
 
     def training_step(self, batch, batch_idx):
         # REQUIRED
         xt = batch.to(device)
-        u_gir = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
-        loss = torch.norm(u_gir)
-        #tensorboard_logs = {'train_loss': loss_prior}
+        loss = self.loss(xt, coef=torch.Tensor([[[[0.2322, 0.8852, 0.5074]]]]))
         self.log('train_loss', loss)
-        #print(loss_total)
         return {'loss': loss}
         
-        
     def validation_step(self, batch, batch_idx):
-        #xtu = batch.to(device)
-        #loss_total = self.loss(xtu)
-        #self.log('val_loss', loss_total)
-        #print(loss_total)
-        #if torch.rand(1)[0]>0.8:
-        xt = batch.to(device)
-        u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
-        loss = torch.norm((u_rnn-u_em))/torch.norm(u_em)
-        #tensorboard_logs = {'train_loss': loss_prior}
-        self.log('val_loss', loss)
-        #print(loss_total)
-        self.metrics[self.current_epoch,:] = loss.item()
-        plt.plot(self.epochs, self.metrics[:,0], label='Val_loss')
-        plt.ylabel('Magnitude')
-        plt.xlabel('Epochs')
-        plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/pde_rnn/muBx_2d.png')
-        plt.clf()
-        """
-        plt.plot(u_em[30,:].cpu(), label='em')
-        plt.plot(u_gir[30,:].cpu(), label='girsanov')
-        plt.plot(u_rnn[30,:].cpu(), label='rnn')
-        plt.ylabel('Magnitude')
-        plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/pde_rnn/xts_2d.png')
-        plt.clf()
-        """
-        #torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/rnn_10d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.sequence.gru.parameters(), lr=self.lr)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "train_loss"}
 
@@ -212,8 +139,10 @@ if __name__ == '__main__':
     #dataset = MNIST(os.getcwd(), train=True, download=True, transform=transforms.ToTensor())
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
-    device = torch.device("cuda:0")
+    device = torch.device("cpu")
     
+    m=100
+    p=15
     X = 0.5
     T = 0.01
     num_time = 50
@@ -222,7 +151,7 @@ if __name__ == '__main__':
     batch_size = 25
     N = 1000
     xs = torch.rand(num_samples,dim) * X
-    ts = torch.rand(num_samples,1) * T
+    ts = torch.randint(low=0,high=num_time,size=(num_samples,1))
     dataset = torch.cat((xs,ts),dim=1)
     data_train = dataset[:20000,:]
     data_val = dataset[20000:,:]
@@ -238,8 +167,8 @@ if __name__ == '__main__':
     train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
     val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
-    model = FKModule(X=X, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N)
-    trainer = pl.Trainer(max_epochs=50,gpus=1)
+    model = FKModule(m=m, dim=dim, p=p, batch_size = batch_size, lr=1e-3, X=X, T=T, N=N, num_time=num_time)
+    trainer = pl.Trainer(max_epochs=50,gpus=0)
     trainer.fit(model, train_loader, val_loader)
     
     print(trainer.logged_metrics['val_loss'])
