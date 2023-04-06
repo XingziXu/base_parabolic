@@ -38,7 +38,7 @@ def drift(x, coef):
 def diffusion(x,t):
     return 1
 def initial(x):
-    return torch.sin(6*np.pi*x)
+    return torch.sin(6*np.pi*x).sum(-1)
 def initial_val(x):
     return torch.sin(1*np.pi*x)
 def r_value():
@@ -86,12 +86,12 @@ class CNN(nn.Module):
 		out = self.conv2(out)
 		out = self.act2(out)
 		out = self.conv3(out)
-		out = self.act3(out)
+		#out = self.act3(out)
 		return out
 
 
 class FKModule(pl.LightningModule):
-    def __init__(self, N = 2000, lr = 1e-3, X = 1., T = 0.1, dim = 2, batch_size = 100, num_time = 100):
+    def __init__(self, N = 2000, lr = 1e-3, X = 1., T = 0.1, dim = 2, batch_size = 100, num_time = 100, n_batch_val=100):
         super().__init__()
         # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
         self.num_time = num_time
@@ -102,9 +102,9 @@ class FKModule(pl.LightningModule):
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = self.dim * 2 + 1
         # hidden_size is dimension of the RNN output
-        hidden_size = 80
+        hidden_size = 100
         # num_layers is the number of RNN blocks
-        num_layers = 2
+        num_layers = 3
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
         self.sequence = CNN(input_size, hidden_size, num_layers, num_outputs)
@@ -124,10 +124,15 @@ class FKModule(pl.LightningModule):
         self.B0 = torch.Tensor(self.B0.cumsum(0)).to(device)
         self.dB = torch.Tensor(self.dB).to(device)
         
-        self.metrics = torch.zeros((50,1))
+        self.metrics = torch.zeros((50,n_batch_val))
+        self.gir_metrics = torch.zeros((50,n_batch_val))
         self.epochs = torch.linspace(0,49,50)
         
-        #self.relu = torch.nn.Softplus()
+        self.relu = torch.nn.Softplus()
+
+        self.coef_train = torch.rand(10,1,1,3).to(device)
+        
+        self.relu = torch.nn.Softplus()
 
     def loss(self, xt, coef):
         xs = xt[:,:-1]
@@ -144,13 +149,13 @@ class FKModule(pl.LightningModule):
         u_em = p0mux.mean(1)
         # calculate values using girsanov
         muBx = drift(Bx, coef)
-        expmart = torch.exp(torch.cumsum(muBx*self.dB,dim=0) - 0.5 * torch.cumsum((muBx ** 2) * self.dt,dim=0))
+        expmart = torch.exp((torch.cumsum(muBx*self.dB,dim=0) - 0.5 * torch.cumsum((muBx ** 2) * self.dt,dim=0)).sum(-1))
         u_gir = (p0Bx*expmart).mean(1)
         # calculate values using RNN
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
         input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
-        rnn_expmart = self.sequence(input_reshaped).reshape(p0Bx.shape)
+        rnn_expmart = self.relu(self.sequence(input_reshaped).sum(-2)).reshape(p0Bx.shape)
         u_rnn = (p0Bx*rnn_expmart).mean(1)
         return u_em, u_gir, u_rnn
 
@@ -166,34 +171,33 @@ class FKModule(pl.LightningModule):
         
         
     def validation_step(self, batch, batch_idx):
-        #xtu = batch.to(device)
-        #loss_total = self.loss(xtu)
-        #self.log('val_loss', loss_total)
-        #print(loss_total)
-        #if torch.rand(1)[0]>0.8:
         xt = batch.to(device)
         u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
         loss = torch.norm((u_rnn-u_em))/torch.norm(u_em)
-        #tensorboard_logs = {'train_loss': loss_prior}
+        loss_g = torch.norm((u_gir-u_em))/torch.norm(u_em)
+        print('Validation: {:.4f}, {:.4f}'.format(loss, loss_g))
         self.log('val_loss', loss)
-        #print(loss_total)
-        self.metrics[self.current_epoch,:] = loss.item()
-        plt.plot(self.epochs, self.metrics[:,0], label='Val_loss')
-        plt.ylabel('Magnitude')
+        if not loss.isnan():
+            self.metrics[self.current_epoch, batch_idx] = loss.item()
+            self.gir_metrics[self.current_epoch, batch_idx] = loss_g.item()
+        ep = torch.arange(self.metrics.shape[0])
+        plt.plot(ep, self.metrics.mean(-1), label='CNN')
+        plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
+        plt.plot(ep, self.gir_metrics.mean(-1), label='Direct Girsanov')
+        plt.fill_between(ep, self.gir_metrics.mean(-1) - self.gir_metrics.std(-1), self.gir_metrics.mean(-1) + self.gir_metrics.std(-1), alpha=0.2)
+        plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/pde_rnn/muBx_2d.png')
+        plt.savefig('muBx_2d_cnn_gir.png')
         plt.clf()
-        """
-        plt.plot(u_em[30,:].cpu(), label='em')
-        plt.plot(u_gir[30,:].cpu(), label='girsanov')
-        plt.plot(u_rnn[30,:].cpu(), label='rnn')
-        plt.ylabel('Magnitude')
+        plt.plot(ep, self.metrics.mean(-1), label='CNN')
+        plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
+        plt.ylabel('Relative Error')
+        plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/pde_rnn/xts_2d.png')
+        plt.savefig('muBx_2d_cnn.png')
         plt.clf()
-        """
-        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/cnn_2d1.pt')
+        #torch.save(self.sequence.state_dict(), 'rnn_10d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -211,18 +215,18 @@ if __name__ == '__main__':
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
     
-    X = 0.5
-    T = 0.05
-    num_time = 250
-    dim = 2
-    num_samples = 10050
-    batch_size = 50
+    X = 1
+    T = 0.2
+    num_time = 100
+    dim = 10
+    num_samples = 4800
+    batch_size = 80
     N = 1000
     xs = torch.rand(num_samples,dim) * X
     ts = torch.rand(num_samples,1) * T
     dataset = torch.cat((xs,ts),dim=1)
-    data_train = dataset[:10000,:]
-    data_val = dataset[10000:,:]
+    data_train = dataset[:num_samples// 2,:]
+    data_val = dataset[num_samples //2 :,:]
     
     train_kwargs = {'batch_size': batch_size,
             'shuffle': True,
@@ -232,11 +236,13 @@ if __name__ == '__main__':
             'shuffle': False,
             'num_workers': 1}
 
+    n_batch_val = int(num_samples // 2 / batch_size)
+
     train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
     val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
-    model = FKModule(X=X, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N)
-    trainer = pl.Trainer(max_epochs=50,gpus=1)
+    model = FKModule(X=X, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
+    trainer = pl.Trainer(max_epochs=50, gpus=1, check_val_every_n_epoch=1)
     trainer.fit(model, train_loader, val_loader)
     
     print(trainer.logged_metrics['val_loss'])

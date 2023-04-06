@@ -79,7 +79,7 @@ class FKModule(pl.LightningModule):
         self.dim = dim # number of dimension of x
         self.p = p # number of "branches"
         self.lr = lr # learning rate
-        self.sensors = initial(torch.linspace(0., 1., self.m).unsqueeze(-1).repeat(1,self.dim) * self.X)
+        self.sensors = initial((torch.linspace(0., 1., self.m).unsqueeze(-1).repeat(1,self.dim) * self.X).to(device))
         self.batch_size = batch_size
         
         self.branch = MLP(input_dim=self.m, hidden_dim=100, output_dim=self.p) # branch network
@@ -109,17 +109,17 @@ class FKModule(pl.LightningModule):
         branchs = self.branch(self.sensors.unsqueeze(0)).repeat(self.batch_size, 1)
         pred = torch.zeros_like(u_gir)
 
-        u_gir_selected = torch.zeros(self.batch_size)
+        u_gir_selected = torch.zeros(self.batch_size).to(device)
         for i in (0,self.batch_size-1):
             u_gir_selected[i] = u_gir[int(ts[i]),i]
         trunks = self.trunk(torch.cat((xs,ts.unsqueeze(1)*self.dt),dim=1))
         pred = (branchs * trunks).sum(1)
-        return torch.norm(pred-u_gir_selected, p=1)
+        return torch.norm(pred-u_gir_selected, p=2)
 
     def training_step(self, batch, batch_idx):
         # REQUIRED
         xt = batch.to(device)
-        loss = self.loss(xt, coef=torch.Tensor([[[[0.2322, 0.8852, 0.5074]]]]))
+        loss = self.loss(xt, coef=torch.Tensor([[[[0.2322, 0.8852, 0.5074]]]]).to(device))
         self.log('train_loss', loss)
         return {'loss': loss}
         
@@ -139,7 +139,7 @@ if __name__ == '__main__':
     #dataset = MNIST(os.getcwd(), train=True, download=True, transform=transforms.ToTensor())
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
-    device = torch.device("cpu")
+    device = torch.device("cuda:0")
     
     m=100
     p=15
@@ -168,7 +168,7 @@ if __name__ == '__main__':
     val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
     model = FKModule(m=m, dim=dim, p=p, batch_size = batch_size, lr=1e-3, X=X, T=T, N=N, num_time=num_time)
-    trainer = pl.Trainer(max_epochs=50,gpus=0)
+    trainer = pl.Trainer(max_epochs=50,gpus=1)
     trainer.fit(model, train_loader, val_loader)
     
     print(trainer.logged_metrics['val_loss'])
