@@ -224,7 +224,7 @@ class FKModule(pl.LightningModule):
         plt.legend()
         plt.savefig('comp_time_rnn.png')
         plt.clf()
-        torch.save(self.sequence.state_dict(), 'cnn_5d.pt')
+        #torch.save(self.sequence.state_dict(), 'rnn_10d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):

@@ -116,7 +116,7 @@ class FKModule(pl.LightningModule):
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = self.dim * 2 + 1
         # hidden_size is dimension of the RNN output
-        hidden_size = 100
+        hidden_size = 50
         # num_layers is the number of RNN blocks
         num_layers = 2
         # num_outputs is the number of ln(rho(x,t))
@@ -190,7 +190,8 @@ class FKModule(pl.LightningModule):
         
     def validation_step(self, batch, batch_idx):
         xt = batch.to(device)
-        u_em, u_gir, u_rnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
+        idx_ = batch_idx % self.coef_train.shape[0]
+        u_em, u_gir, u_rnn = self.loss(xt, coef=self.coef_train[idx_].unsqueeze(0).to(device))
         loss = torch.norm((u_rnn-u_em))/torch.norm(u_em)
         loss_g = torch.norm((u_gir-u_em))/torch.norm(u_em)
         print('Validation: {:.4f}, {:.4f}'.format(loss, loss_g))
@@ -233,7 +234,7 @@ if __name__ == '__main__':
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
     
-    X = 1
+    X = 0.5
     T = 0.2
     num_time = 100
     dim = 10
