@@ -74,11 +74,11 @@ class CNN(nn.Module):
 		super(CNN, self).__init__()
 		#self.num_layers = num_layers
 		#self.hidden_size = hidden_size
-		self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=3, padding=1)
+		self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
 		self.act1 = nn.Softplus()
-		self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=3, padding=1)
+		self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
 		self.act2 = nn.Softplus()
-		self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=3, padding=1)
+		self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
 		self.act3 = nn.Softplus()
 	
 	def forward(self, x):
@@ -109,7 +109,7 @@ class FKModule(pl.LightningModule):
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
         self.sequence = CNN(input_size, hidden_size, num_layers, num_outputs)
-        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/cnn_5d.pt'))
+        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/cnn_5d.pt'))
 
         # define the learning rate
         self.lr = 1e-30
@@ -174,20 +174,22 @@ class FKModule(pl.LightningModule):
         end = time.time()
         time_gir = (end - start)
         # calculate values using RNN
-        start = time.time()
+        
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
         input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
+        start = time.time()
         rnn_expmart = self.relu(self.sequence(input_reshaped).sum(-2)).reshape(p0Bx.shape)
         u_cnn = (p0Bx*rnn_expmart).mean(1)
         end = time.time()
         time_cnn = (end - start)
         # calculate values using deeponet
-        start = time.time()
+        
         axis = torch.Tensor([]).to(device)
         for i in range(self.num_time):
             current_axis = torch.cat((xs,i*self.dt*torch.ones(xs.shape[0],1).to(device)),dim=1)
             axis = torch.cat((axis,current_axis),dim=0)
+        start = time.time()
         branchs = self.branch(self.sensors.unsqueeze(0)).repeat(self.batch_size*(self.num_time), 1)
         u_don = torch.zeros_like(u_em)
         trunks = self.trunk(axis)

@@ -74,11 +74,11 @@ class CNN(nn.Module):
 		super(CNN, self).__init__()
 		#self.num_layers = num_layers
 		#self.hidden_size = hidden_size
-		self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=3, padding=1)
+		self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
 		self.act1 = nn.Softplus()
-		self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=3, padding=1)
+		self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
 		self.act2 = nn.Softplus()
-		self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=3, padding=1)
+		self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
 		self.act3 = nn.Softplus()
 	
 	def forward(self, x):
@@ -224,7 +224,7 @@ class FKModule(pl.LightningModule):
         plt.legend()
         plt.savefig('comp_time_rnn.png')
         plt.clf()
-        torch.save(self.sequence.state_dict(), 'cnn_5d.pt')
+        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/cnn_5d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
