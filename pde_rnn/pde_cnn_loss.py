@@ -109,7 +109,7 @@ class FKModule(pl.LightningModule):
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
         self.sequence = CNN(input_size, hidden_size, num_layers, num_outputs)
-        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/cnn_5d.pt'))
+        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/cnn_10d_girloss.pt'))
 
         # define the learning rate
         self.lr = 1e-30
@@ -119,11 +119,29 @@ class FKModule(pl.LightningModule):
         self.dt = self.t[1]-self.t[0] # define time step
 
         # define the brwonian motion starting at zero
-        self.dB = np.sqrt(self.dt.item()) * np.random.randn(self.t.shape[0], self.N, self.batch_size, self.dim)
-        self.dB[0,:,:,:] = 0 
-        self.B0 = self.dB.copy()
-        self.B0 = torch.Tensor(self.B0.cumsum(0)).to(device)
-        self.dB = torch.Tensor(self.dB).to(device)
+        self.dB_em = np.sqrt(self.dt.item()) * np.random.randn(self.t.shape[0], self.N, self.batch_size, self.dim)
+        self.dB_em[0,:,:,:] = 0 
+        self.B0_em = self.dB_em.copy()
+        self.B0_em = torch.Tensor(self.B0_em.cumsum(0)).to(device)
+        self.dB_em = torch.Tensor(self.dB_em).to(device)
+        
+        self.dB_gir = np.sqrt(self.dt.item()) * np.random.randn(self.t.shape[0], self.N, self.batch_size, self.dim)
+        self.dB_gir[0,:,:,:] = 0 
+        self.B0_gir = self.dB_gir.copy()
+        self.B0_gir = torch.Tensor(self.B0_gir.cumsum(0)).to(device)
+        self.dB_gir = torch.Tensor(self.dB_gir).to(device)
+        
+        self.dB_cnn = np.sqrt(self.dt.item()) * np.random.randn(self.t.shape[0], self.N, self.batch_size, self.dim)
+        self.dB_cnn[0,:,:,:] = 0 
+        self.B0_cnn = self.dB_cnn.copy()
+        self.B0_cnn = torch.Tensor(self.B0_cnn.cumsum(0)).to(device)
+        self.dB_cnn = torch.Tensor(self.dB_cnn).to(device)
+        
+        self.dB_don = np.sqrt(self.dt.item()) * np.random.randn(self.t.shape[0], self.N, self.batch_size, self.dim)
+        self.dB_don[0,:,:,:] = 0 
+        self.B0_don = self.dB_don.copy()
+        self.B0_don = torch.Tensor(self.B0_don.cumsum(0)).to(device)
+        self.dB_don = torch.Tensor(self.dB_don).to(device)
         
         self.cnn_metrics = torch.zeros((1,n_batch_val))
         self.gir_metrics = torch.zeros((1,n_batch_val))
@@ -154,37 +172,41 @@ class FKModule(pl.LightningModule):
         xs = xt[:,:-1]
         ts = xt[:,-1]
         coef = coef
-        Bx = (xs.unsqueeze(0).unsqueeze(0)+self.B0)
-        p0Bx = initial(Bx)
+        Bx_em = (xs.unsqueeze(0).unsqueeze(0)+self.B0_em)
+        p0Bx_em = initial(Bx_em)
+        
+        Bx_gir = (xs.unsqueeze(0).unsqueeze(0)+self.B0_gir)
+        p0Bx_gir = initial(Bx_gir)
+        
+        Bx_cnn = (xs.unsqueeze(0).unsqueeze(0)+self.B0_cnn)
+        p0Bx_cnn = initial(Bx_cnn)
         # calculate values using euler-maruyama
         start = time.time()
         x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
         x[0,:,:,:] = xs.squeeze()
         for i in range(self.num_time-1):
-            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef).squeeze() * self.dt + self.dB[i,:,:,:]
+            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef).squeeze() * self.dt + self.dB_em[i,:,:,:]
         p0mux = initial(x)
         u_em = p0mux.mean(1)
         end = time.time()
         time_em = (end - start)
         # calculate values using girsanov
         start = time.time()
-        muBx = drift(Bx, coef)
-        expmart = torch.exp((torch.cumsum(muBx*self.dB,dim=0) - 0.5 * torch.cumsum((muBx ** 2) * self.dt,dim=0)).sum(-1))
-        u_gir = (p0Bx*expmart).mean(1)
+        muBx = drift(Bx_gir, coef)
+        expmart = torch.exp((torch.cumsum(muBx*self.dB_gir,dim=0) - 0.5 * torch.cumsum((muBx ** 2) * self.dt,dim=0)).sum(-1))
+        u_gir = (p0Bx_gir*expmart).mean(1)
         end = time.time()
         time_gir = (end - start)
-        # calculate values using RNN
-        
+        # calculate values using CNN
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
-        input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
+        input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB_cnn,self.dt*torch.ones(self.dB_cnn.shape[0],self.dB_cnn.shape[1],self.dB_cnn.shape[2],1).to(device)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
         start = time.time()
-        rnn_expmart = self.relu(self.sequence(input_reshaped).sum(-2)).reshape(p0Bx.shape)
-        u_cnn = (p0Bx*rnn_expmart).mean(1)
+        rnn_expmart = self.relu(self.sequence(input_reshaped).sum(-2)).reshape(p0Bx_cnn.shape)
+        u_cnn = (p0Bx_cnn*rnn_expmart).mean(1)
         end = time.time()
         time_cnn = (end - start)
         # calculate values using deeponet
-        
         axis = torch.Tensor([]).to(device)
         for i in range(self.num_time):
             current_axis = torch.cat((xs,i*self.dt*torch.ones(xs.shape[0],1).to(device)),dim=1)
@@ -210,11 +232,14 @@ class FKModule(pl.LightningModule):
         
         
     def validation_step(self, batch, batch_idx):
+        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/cnn_10d_girloss.pt'))
+        self.branch.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/branch_5d.pt'))
+        self.trunk.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/trunk_5d.pt'))
         xt = batch.to(device)
         u_em, u_gir, u_cnn, u_don, time_em, time_gir, time_cnn, time_don = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
-        loss_cnn = torch.norm((u_cnn-u_em))/torch.norm(u_em)
-        loss_gir = torch.norm((u_gir-u_em))/torch.norm(u_em)
-        loss_don = torch.norm((u_don-u_em))/torch.norm(u_em)
+        loss_cnn = F.mse_loss(u_cnn,u_em,reduction='mean')/(torch.abs(u_em).mean())
+        loss_gir = F.mse_loss(u_gir,u_em,reduction='mean')/(torch.abs(u_em).mean())
+        loss_don = F.mse_loss(u_don,u_em,reduction='mean')/(torch.abs(u_em).mean())
         print('Validation: {:.4f}, {:.4f}'.format(loss_cnn, loss_gir))
         self.log('val_loss', loss_cnn)
         if not loss_cnn.isnan():
@@ -314,14 +339,14 @@ if __name__ == '__main__':
     em_time_mean = []
     em_time_max = []
     
-    for i in range(1,21):
+    for i in reversed(range(3,15)):
         X = 0.5
-        T = i * 0.05
-        num_time = 25 * i
+        T = i * 0.025
+        num_time = 10 * i
         dim = 10
-        num_samples = 220
-        batch_size = 10
-        N = 500
+        num_samples = 420
+        batch_size = 20
+        N = 4000
         xs = torch.rand(num_samples,dim) * X
         ts = torch.rand(num_samples,1) * T
         dataset = torch.cat((xs,ts),dim=1)

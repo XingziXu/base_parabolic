@@ -176,7 +176,7 @@ class FKModule(pl.LightningModule):
         # REQUIRED
         xt = batch.to(device)
         u_em, u_gir, u_rnn, time_em, time_gir, time_rnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
-        loss = F.l1_loss(u_rnn, u_gir)
+        loss = F.l1_loss(u_rnn, u_gir)#/(torch.abs(u_gir).mean())
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('train_loss', loss)
         #print(loss_total)
@@ -186,8 +186,8 @@ class FKModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         xt = batch.to(device)
         u_em, u_gir, u_rnn, time_em, time_gir, time_rnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
-        loss = torch.norm((u_rnn-u_em))/torch.norm(u_em)
-        loss_g = torch.norm((u_gir-u_em))/torch.norm(u_em)
+        loss = F.mse_loss(u_rnn,u_em,reduction='mean')/(torch.abs(u_em).mean())
+        loss_g = F.mse_loss(u_gir,u_em,reduction='mean')/(torch.abs(u_em).mean())
         print('Validation: {:.4f}, {:.4f}'.format(loss, loss_g))
         self.log('val_loss', loss)
         if not loss.isnan():
@@ -224,7 +224,7 @@ class FKModule(pl.LightningModule):
         plt.legend()
         plt.savefig('comp_time_rnn.png')
         plt.clf()
-        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/cnn_5d.pt')
+        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/pde_rnn/cnn_10d_girloss.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -243,12 +243,12 @@ if __name__ == '__main__':
     device = torch.device("cuda:0")
     
     X = 0.5
-    T = 0.2
-    num_time = 100
+    T = 0.1
+    num_time = 40
     dim = 10
-    num_samples = 8000
-    batch_size = 80
-    N = 1000
+    num_samples = 12000
+    batch_size = 60
+    N = 4000
     xs = torch.rand(num_samples,dim) * X
     ts = torch.rand(num_samples,1) * T
     dataset = torch.cat((xs,ts),dim=1)
