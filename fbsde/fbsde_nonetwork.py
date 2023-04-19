@@ -26,10 +26,10 @@ def sigma_batch(t,x):
     return torch.cos(t)
 
 def g(x):
-    return torch.sin(x)
+    return torch.cos(x)
 
 def h(t,x,y,z):
-    return t+x+y+z
+    return torch.cos(t+x+y+z)
 
 def divergence(y, x):
         div = 0.
@@ -57,12 +57,12 @@ if __name__ == '__main__':
     # EM calculation of FBSDE
     x_num = 60
     dim = 1
-    N = 1000
+    N = 200
     
     x0 = torch.linspace(0.,0.6, x_num).unsqueeze(1)#torch.rand(x_num, dim)
-    t0 = torch.Tensor([0.8])
-    T = 1.
-    num_steps = 50
+    t0 = torch.Tensor([0.])
+    T = 0.1
+    num_steps = 40
     t = torch.linspace(t0.item(), T, steps=num_steps)
     dt = t[1]-t[0]
     dB = np.sqrt(dt.item()) * torch.randn(N, dim, num_steps)
@@ -148,17 +148,17 @@ if __name__ == '__main__':
     xT = xi[:,:,:,-1]
     yT = g(xT)
     yi = torch.zeros_like(xi)
-    yi[:,:,:,-1] = yT
+    yi[:,:,:,-1] = yT * expmart[:,:,:,-1]
     vi = yT.mean(1)
     z_current = sigma(T,xT) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi))[0]
     for i in reversed(range(1,num_steps)):
         x_current = xi[:,:,:,i]
         t_current = t[i]
-        yi[:,:,:,i-1] = yi[:,:,:,i] + h(t_current,x_current,yi[:,:,:,i],z_current) * dt
+        yi[:,:,:,i-1] = yi[:,:,:,i] + h(t_current,x_current,yi[:,:,:,i],z_current) * dt * expmart[:,:,:,i-1]
         vi = yi[:,:,:,i-1].mean(1)
         z_current = sigma(t_current,x_current) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi))[0]
         
-    vis_gir = (yi * expmart).mean(1)
+    vis_gir = yi.mean(1)
     
     plt.subplot(2,2,1)
     plt.imshow(vis.squeeze().detach().numpy())

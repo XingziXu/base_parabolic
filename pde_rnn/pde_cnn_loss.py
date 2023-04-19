@@ -339,13 +339,13 @@ if __name__ == '__main__':
     em_time_mean = []
     em_time_max = []
     
-    for i in reversed(range(3,15)):
+    for i in range(1,21):
         X = 0.5
         T = i * 0.025
         num_time = 10 * i
         dim = 10
         num_samples = 420
-        batch_size = 20
+        batch_size = 10
         N = 4000
         xs = torch.rand(num_samples,dim) * X
         ts = torch.rand(num_samples,1) * T

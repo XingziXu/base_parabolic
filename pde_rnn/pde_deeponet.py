@@ -142,14 +142,15 @@ if __name__ == '__main__':
     
     m=100
     p=15
-    X = 0.5
+    x0 = 0.5
+    X = 1.5
     T = 0.01
     num_time = 50
     dim = 10
     num_samples = 20025
     batch_size = 25
     N = 1000
-    xs = torch.rand(num_samples,dim) * X
+    xs = torch.rand(num_samples,dim) * X + x0
     ts = torch.randint(low=0,high=num_time,size=(num_samples,1))
     dataset = torch.cat((xs,ts),dim=1)
     data_train = dataset[:20000,:]

@@ -234,14 +234,15 @@ if __name__ == '__main__':
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
     
-    X = 0.5
+    x0 = 1.0
+    X = 2.0
     T = 0.2
     num_time = 100
     dim = 10
     num_samples = 5000
     batch_size = 10
     N = 1000
-    xs = torch.rand(num_samples,dim) * X
+    xs = torch.rand(num_samples,dim) * X + x0
     ts = torch.rand(num_samples,1) * T
     dataset = torch.cat((xs,ts),dim=1)
     data_train = dataset[:num_samples// 2,:]

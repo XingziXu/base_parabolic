@@ -24,7 +24,7 @@ with open('/scratch/xx84/girsanov/pde_rnn/don_loss_min.npy', 'rb') as f:
 with open('/scratch/xx84/girsanov/pde_rnn/don_loss_max.npy', 'rb') as f:
     don_max = np.load(f)
 
-ep = torch.arange(11) * 0.025
+ep = torch.arange(20) * 0.025
 
 plt.plot(ep, np.array(gir_mean), label='Girsanov', color='palevioletred')
 plt.fill_between(ep, np.array(gir_min), np.array(gir_max), alpha=0.2, color='lightpink')
@@ -67,7 +67,7 @@ with open('/scratch/xx84/girsanov/pde_rnn/em_time_min.npy', 'rb') as f:
 with open('/scratch/xx84/girsanov/pde_rnn/em_time_max.npy', 'rb') as f:
     em_max = np.load(f)
 
-ep = torch.arange(11) * 0.025
+ep = torch.arange(20) * 0.025
 
 plt.plot(ep, np.array(gir_mean)*1e3, label='Girsanov', color='palevioletred')
 plt.fill_between(ep, np.array(gir_min)*1e3, np.array(gir_max)*1e3, alpha=0.2, color='lightpink')
