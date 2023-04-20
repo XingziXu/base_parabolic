@@ -42,27 +42,6 @@ def g(x):
 def h(t,x,y,z):
     return (x+z).sum(-1) + (t+y)
 
-class CNN(nn.Module):
-	def __init__(self, input_size, hidden_size, num_layers, num_outputs):
-		super(CNN, self).__init__()
-		#self.num_layers = num_layers
-		#self.hidden_size = hidden_size
-		self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
-		self.act1 = nn.Softplus()
-		self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
-		self.act2 = nn.Softplus()
-		self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
-		self.act3 = nn.Softplus()
-	
-	def forward(self, x):
-		out = self.conv1(x)
-		out = self.act1(out)
-		out = self.conv2(out)
-		out = self.act2(out)
-		out = self.conv3(out)
-		#out = self.act3(out)
-		return out
-
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
@@ -102,7 +81,7 @@ class FKModule(pl.LightningModule):
         num_outputs = self.dim
         self.branch = MLP(input_dim=self.m, hidden_dim=100, output_dim=self.p) # branch network
         self.trunk = MLP(input_dim=dim+1, hidden_dim=50, output_dim=self.p) # trunk network
-        self.sensors = g((torch.linspace(0., 1., self.m).unsqueeze(-1).repeat(1,self.dim) * self.X).to(device))
+        self.sensors = g((torch.linspace(self.t0.item(), self.T.item(), self.m).unsqueeze(-1).repeat(1,self.dim) * self.X).to(device))
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate
@@ -212,7 +191,7 @@ class FKModule(pl.LightningModule):
         
         #v_cnn = v_cnn[~torch.any(v_cnn.isnan(),dim=1)]
         #v_cnn = v_cnn[~torch.any(v_cnn.isnan(),dim=1)]
-        loss = F.l1_loss(v_don, v_em)#/(torch.abs(u_gir).mean())
+        loss = F.l1_loss(v_don, v_gir)#/(torch.abs(u_gir).mean())
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('train_loss', loss)
         #print(loss_total)

@@ -40,29 +40,62 @@ def g(x):
     return torch.sin(2*np.pi*x).sum(-1)
 
 def h(t,x,y,z):
-    return (x+z).sum(-1) + (t+y)
+    return torch.sin(x+z).sum(-1) + torch.cos(t+y)
 
 class CNN(nn.Module):
-	def __init__(self, input_size, hidden_size, num_layers, num_outputs):
-		super(CNN, self).__init__()
-		#self.num_layers = num_layers
-		#self.hidden_size = hidden_size
-		self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
-		self.act1 = nn.Softplus()
-		self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
-		self.act2 = nn.Softplus()
-		self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
-		self.act3 = nn.Softplus()
+    def __init__(self, input_size, hidden_size, num_layers, num_outputs):
+        super(CNN, self).__init__()
+        #self.num_layers = num_layers
+        #self.hidden_size = hidden_size
+        self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act1 = nn.Softplus()
+        self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act2 = nn.Softplus()
+        self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
+        #self.act3 = nn.Softplus()
+        #self.conv4 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        #self.act4 = nn.Softplus()
+        #self.conv5 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
 	
-	def forward(self, x):
-		out = self.conv1(x)
-		out = self.act1(out)
-		out = self.conv2(out)
-		out = self.act2(out)
-		out = self.conv3(out)
-		#out = self.act3(out)
-		return out
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.act1(out)
+        out = self.conv2(out)
+        out = self.act2(out)
+        out = self.conv3(out)
+        #out = self.act3(out)
+        #out = self.conv4(out)
+        #out = self.act4(out)
+        #out = self.conv5(out)
+        return out
 
+class CNN1(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, num_outputs):
+        super(CNN1, self).__init__()
+        #self.num_layers = num_layers
+        #self.hidden_size = hidden_size
+        self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act1 = nn.Softplus()
+        self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act2 = nn.Softplus()
+        self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act3 = nn.Softplus()
+        self.conv4 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act4 = nn.Softplus()
+        self.conv5 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
+	
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.act1(out)
+        out = self.conv2(out)
+        out = self.act2(out)
+        out = self.conv3(out)
+        out = self.act3(out)
+        out = self.conv4(out)
+        out = self.act4(out)
+        out = self.conv5(out)
+        #out = self.act3(out)
+        return out
 
 class FKModule(pl.LightningModule):
     def __init__(self, N = 2000, lr = 1e-3, X = 1., t0=0., T = 0.1, dim = 2, batch_size = 100, num_time = 100, n_batch_val=100):
@@ -77,12 +110,13 @@ class FKModule(pl.LightningModule):
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = self.dim * 2 + 1
         # hidden_size is dimension of the RNN output
-        hidden_size = 100
+        hidden_size = 80
         # num_layers is the number of RNN blocks
         num_layers = 3
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
-        self.sequence = CNN(input_size, hidden_size, num_layers, num_outputs)
+        self.expmart_cnn = CNN(input_size, hidden_size, num_layers, num_outputs)
+        self.zt_cnn = CNN1(input_size=dim+1, hidden_size=80, num_layers=3, num_outputs=self.dim)
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate
@@ -117,7 +151,7 @@ class FKModule(pl.LightningModule):
         self.relu = torch.nn.Softplus()
 
     def loss(self, xt, coef, em = False):
-        # calculation with girsanov
+       # calculation with girsanov
         xs = xt[:,:-1]
         ts = xt[:,-1]
         sigmas = sigma(self.t[0],xs)
@@ -128,19 +162,22 @@ class FKModule(pl.LightningModule):
         start = time.time()
         mart = torch.cumsum(mu * self.dB, dim=-1) - 0.5 * torch.cumsum(mu ** 2, dim=-1) * self.dt
         expmart = torch.exp(mart.sum(-1))
-        
+
         xT = xi[-1,:,:,:]
-        yT = g(xT)
+        yT = g(xT) * expmart[-1,:,:]
         yi = torch.zeros(self.num_time, self.N, self.batch_size).to(device)
-        yi[-1,:,:] = yT * expmart[-1,:,:]
+        yi[-1,:,:] = yT
         vi = yT.mean(0)
+        zi_gir = torch.zeros_like(xi)
         z_current = sigma(torch.Tensor([T]),xT).to(device) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+        zi_gir[-1,:,:,:] = z_current
         for i in reversed(range(1,self.num_time)):
             x_current = xi[i,:,:,:]
             t_current = self.t[i]
             yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current) * self.dt * expmart[i-1,:,:]
-            vi = yi[i-1,:,:].mean(1)
+            vi = yi[i-1,:,:].mean(0)
             z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+            zi_gir[i-1,:,:,:] = z_current
             
         v_gir = yi.mean(1)
         end = time.time()
@@ -150,20 +187,33 @@ class FKModule(pl.LightningModule):
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
         input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
-        cnn_expmart = self.relu(self.sequence(input_reshaped).sum(-2)).reshape(self.num_time, self.N, self.batch_size)
+        cnn_expmart = self.relu(self.expmart_cnn(input_reshaped).sum(-2)).reshape(self.num_time, self.N, self.batch_size)
+        
         
         xT = xi[-1,:,:,:]
-        yT = g(xT)
+        yT = g(xT) * cnn_expmart[-1,:,:]
+        
+        #yT_cnn = (g(xi) * cnn_expmart).mean(1)
+        
         yi = torch.zeros(self.num_time, self.N, self.batch_size).to(device)
-        yi[-1,:,:] = yT * cnn_expmart[-1,:,:]
-        vi = yT.mean(0)
-        z_current = sigma(torch.Tensor([T]),xT).to(device) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+        yi[-1,:,:] = yT
+        vi = yi[-1,:,:].mean(0)
+        zi_cnn = torch.zeros_like(xi)
+        input_zi = torch.cat((yT.unsqueeze(-1),xT),dim=-1)
+        input_zi = input_zi.reshape(input_zi.shape[0] * input_zi.shape[1], input_zi.shape[2], 1)
+        z_current = self.zt_cnn(input_zi).reshape(xT.shape)
+        #z_current = sigma(torch.Tensor([T]),xT).to(device) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+        zi_cnn[-1,:,:,:] = z_current
         for i in reversed(range(1,self.num_time)):
             x_current = xi[i,:,:,:]
             t_current = self.t[i]
             yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current) * self.dt * cnn_expmart[i-1,:,:]
-            vi = yi[i-1,:,:].mean(1)
-            z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+            vi = yi[i-1,:,:].mean(0)
+            input_zi = torch.cat((yi[i-1,:,:].unsqueeze(-1),x_current),dim=-1)
+            input_zi = input_zi.reshape(input_zi.shape[0] * input_zi.shape[1], input_zi.shape[2], 1)
+            z_current = sigma(t_current,x_current).to(device) * self.zt_cnn(input_zi).reshape(xT.shape)
+            #z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+            zi_cnn[i-1,:,:,:] = z_current
             
         v_cnn = yi.mean(1)
         end = time.time()
@@ -184,28 +234,31 @@ class FKModule(pl.LightningModule):
             yi = torch.zeros(self.num_time, self.N, self.batch_size).to(device)
             yi[-1,:,:] = yT
             vi = yT.mean(0)
+            zi_em = torch.zeros_like(xi)
             z_current = sigma(torch.Tensor([T]),xT).to(device) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+            zi_em[-1,:,:,:] = z_current
             for i in reversed(range(1,self.num_time)):
                 x_current = xi[i,:,:,:]
                 t_current = self.t[i]
                 yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current) * self.dt
-                vi = yi[i-1,:,:].mean(1)
+                vi = yi[i-1,:,:].mean(0)
                 z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+                zi_em[i-1,:,:,:] = z_current
                 
             v_em = yi.mean(1)
             end = time.time()
             time_em = (end - start)
-            return v_gir, v_cnn, v_em, time_gir, time_cnn, time_em
-        return v_gir, v_cnn, time_gir, time_cnn
+            return v_gir, v_cnn, v_em, time_gir, time_cnn, time_em, zi_em, zi_cnn, zi_gir
+        return v_gir, v_cnn, time_gir, time_cnn, zi_cnn, zi_gir
 
     def training_step(self, batch, batch_idx):
         # REQUIRED
         xt = batch.to(device)
-        v_gir, v_cnn, v_em, time_gir, time_cnn, time_em = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), em=True)
+        v_gir, v_cnn, v_em, time_gir, time_cnn, time_em, zi_em, zi_cnn, zi_gir = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), em=True)
         
         #v_cnn = v_cnn[~torch.any(v_cnn.isnan(),dim=1)]
         #v_cnn = v_cnn[~torch.any(v_cnn.isnan(),dim=1)]
-        loss = F.l1_loss(v_cnn, v_em)#/(torch.abs(u_gir).mean())
+        loss = F.l1_loss(v_cnn, v_gir)+F.l1_loss(zi_cnn, zi_gir)#+F.l1_loss(zi_cnn, zi_em)+F.l1_loss(v_cnn, v_em)#/(torch.abs(u_gir).mean())
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('train_loss', loss)
         #print(loss_total)
@@ -216,7 +269,7 @@ class FKModule(pl.LightningModule):
         #super().on_validation_model_eval(*args, **kwargs)
         torch.set_grad_enabled(True)
         xt = batch.to(device)
-        v_cnn, v_gir, v_em, time_gir, time_cnn, time_em = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), em=True)
+        v_cnn, v_gir, v_em, time_gir, time_cnn, time_em, zi_em, zi_cnn, zi_gir = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), em=True)
         loss = F.mse_loss(v_cnn,v_em,reduction='mean')/(torch.abs(v_em).mean())
         loss_g = F.mse_loss(v_gir,v_em,reduction='mean')/(torch.abs(v_em).mean())
         print('Validation: {:.4f}, {:.4f}'.format(loss, loss_g))
@@ -255,7 +308,7 @@ class FKModule(pl.LightningModule):
         plt.legend()
         plt.savefig('/scratch/xx84/girsanov/fbsde/comp_time_cnn.png')
         plt.clf()
-        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/fbsde/cnn_5d_girloss.pt')
+        #torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/fbsde/cnn_5d_girloss.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -280,8 +333,8 @@ if __name__ == '__main__':
     num_time = 40
     dim = 10
     num_samples = 12000
-    batch_size = 40
-    N = 4000
+    batch_size = 50
+    N = 1000
     xs = torch.rand(num_samples,dim) * X + x0
     ts = torch.rand(num_samples,1) * T
     dataset = torch.cat((xs,ts),dim=1)
