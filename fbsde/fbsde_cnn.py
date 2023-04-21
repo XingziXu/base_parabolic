@@ -27,9 +27,9 @@ import time
 
 def b(t,x, coef):
     x = x.unsqueeze(-1)
-    x0 = x ** 0
-    x1 = x ** 1
-    x2 = x ** 2
+    x0 = torch.sin(x)
+    x1 = torch.cos(x)
+    x2 = x ** 0
     vals = torch.cat((x0,x1,x2),axis=-1)
     return (coef * vals).sum(-1)
 
@@ -82,7 +82,11 @@ class CNN1(nn.Module):
         self.act3 = nn.Softplus()
         self.conv4 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
         self.act4 = nn.Softplus()
-        self.conv5 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
+        self.conv5 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act5 = nn.Softplus()
+        self.conv6 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act6 = nn.Softplus()
+        self.conv7 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
 	
     def forward(self, x):
         out = self.conv1(x)
@@ -94,7 +98,10 @@ class CNN1(nn.Module):
         out = self.conv4(out)
         out = self.act4(out)
         out = self.conv5(out)
-        #out = self.act3(out)
+        out = self.act5(out)
+        out = self.conv6(out)
+        out = self.act6(out)
+        out = self.conv7(out)
         return out
 
 class FKModule(pl.LightningModule):
@@ -116,7 +123,7 @@ class FKModule(pl.LightningModule):
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
         self.expmart_cnn = CNN(input_size, hidden_size, num_layers, num_outputs)
-        self.zt_cnn = CNN1(input_size=dim+1, hidden_size=80, num_layers=3, num_outputs=self.dim)
+        self.zt_cnn = CNN1(input_size=dim+1, hidden_size=20, num_layers=3, num_outputs=self.dim)
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate
@@ -327,14 +334,14 @@ if __name__ == '__main__':
     device = torch.device("cuda:0")
     
     x0 = 0.1
-    X = 0.2
+    X = 0.5
     T = 0.1
     t0 = 0.
     num_time = 40
-    dim = 10
+    dim = 6
     num_samples = 12000
-    batch_size = 50
-    N = 1000
+    batch_size = 30
+    N = 4000
     xs = torch.rand(num_samples,dim) * X + x0
     ts = torch.rand(num_samples,1) * T
     dataset = torch.cat((xs,ts),dim=1)

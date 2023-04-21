@@ -27,9 +27,9 @@ import time
 
 def b(t,x, coef):
     x = x.unsqueeze(-1)
-    x0 = x ** 0
-    x1 = x ** 1
-    x2 = x ** 2
+    x0 = torch.sin(x)
+    x1 = torch.cos(x)
+    x2 = x ** 0
     vals = torch.cat((x0,x1,x2),axis=-1)
     return (coef * vals).sum(-1)
 
@@ -40,7 +40,7 @@ def g(x):
     return torch.sin(2*np.pi*x).sum(-1)
 
 def h(t,x,y,z):
-    return (x+z).sum(-1) + (t+y)
+    return torch.sin(x+z).sum(-1) + torch.cos(t+y)
 
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -127,19 +127,22 @@ class FKModule(pl.LightningModule):
         start = time.time()
         mart = torch.cumsum(mu * self.dB, dim=-1) - 0.5 * torch.cumsum(mu ** 2, dim=-1) * self.dt
         expmart = torch.exp(mart.sum(-1))
-        
+
         xT = xi[-1,:,:,:]
-        yT = g(xT)
+        yT = g(xT) * expmart[-1,:,:]
         yi = torch.zeros(self.num_time, self.N, self.batch_size).to(device)
-        yi[-1,:,:] = yT * expmart[-1,:,:]
+        yi[-1,:,:] = yT
         vi = yT.mean(0)
+        zi_gir = torch.zeros_like(xi)
         z_current = sigma(torch.Tensor([T]),xT).to(device) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+        zi_gir[-1,:,:,:] = z_current
         for i in reversed(range(1,self.num_time)):
             x_current = xi[i,:,:,:]
             t_current = self.t[i]
             yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current) * self.dt * expmart[i-1,:,:]
-            vi = yi[i-1,:,:].mean(1)
+            vi = yi[i-1,:,:].mean(0)
             z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+            zi_gir[i-1,:,:,:] = z_current
             
         v_gir = yi.mean(1)
         end = time.time()
@@ -147,15 +150,16 @@ class FKModule(pl.LightningModule):
         # calculation with don
         start = time.time()
         branchs = self.branch(self.sensors.unsqueeze(0)).repeat(self.batch_size, 1)
-        v_don = torch.zeros_like(v_gir)
+        v_don = torch.zeros(self.num_time, self.batch_size).to(device)
         for i in range(self.num_time-1):
             trunks = self.trunk(torch.cat((xs,i*self.dt*torch.ones(xs.shape[0],1).to(device)),dim=1))
             v_don[i,:] = (branchs * trunks).sum(1)
+        v_don = v_don
         end = time.time()
         time_cnn = (end - start)
         if em:
             # calculation with EM
-            start = time.time()
+            # calculation with EM
             xs = xt[:,:-1]
             ts = xt[:,-1]
             xi= xs.unsqueeze(0).repeat(N,1,1)
@@ -170,13 +174,16 @@ class FKModule(pl.LightningModule):
             yi = torch.zeros(self.num_time, self.N, self.batch_size).to(device)
             yi[-1,:,:] = yT
             vi = yT.mean(0)
+            zi_em = torch.zeros_like(xi)
             z_current = sigma(torch.Tensor([T]),xT).to(device) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+            zi_em[-1,:,:,:] = z_current
             for i in reversed(range(1,self.num_time)):
                 x_current = xi[i,:,:,:]
                 t_current = self.t[i]
                 yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current) * self.dt
-                vi = yi[i-1,:,:].mean(1)
+                vi = yi[i-1,:,:].mean(0)
                 z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+                zi_em[i-1,:,:,:] = z_current
                 
             v_em = yi.mean(1)
             end = time.time()
@@ -261,11 +268,11 @@ if __name__ == '__main__':
     device = torch.device("cuda:0")
     
     x0 = 0.1
-    X = 0.2
+    X = 0.5
     T = 0.1
     t0 = 0.
     num_time = 40
-    dim = 10
+    dim = 6
     num_samples = 12000
     batch_size = 80
     N = 4000
