@@ -27,9 +27,9 @@ import time
 
 def b(t,x, coef):
     x = x.unsqueeze(-1)
-    x0 = torch.sin(x)
-    x1 = torch.cos(x)
-    x2 = x ** 0
+    x0 = x ** 0
+    x1 = x ** 1
+    x2 = x ** 2
     vals = torch.cat((x0,x1,x2),axis=-1)
     return (coef * vals).sum(-1)
 
@@ -272,7 +272,7 @@ if __name__ == '__main__':
     T = 0.1
     t0 = 0.
     num_time = 40
-    dim = 6
+    dim = 4
     num_samples = 12000
     batch_size = 80
     N = 4000

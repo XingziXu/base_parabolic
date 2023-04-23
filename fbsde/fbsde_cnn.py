@@ -27,9 +27,9 @@ import time
 
 def b(t,x, coef):
     x = x.unsqueeze(-1)
-    x0 = torch.sin(x)
-    x1 = torch.cos(x)
-    x2 = x ** 0
+    x0 = x ** 0
+    x1 = x ** 1
+    x2 = x ** 2
     vals = torch.cat((x0,x1,x2),axis=-1)
     return (coef * vals).sum(-1)
 
@@ -122,7 +122,7 @@ class FKModule(pl.LightningModule):
         num_layers = 3
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
-        self.expmart_cnn = CNN(input_size, hidden_size, num_layers, num_outputs)
+        self.expmart_cnn = CNN1(input_size, hidden_size, num_layers, num_outputs)
         self.zt_cnn = CNN1(input_size=dim+1, hidden_size=20, num_layers=3, num_outputs=self.dim)
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
@@ -315,7 +315,8 @@ class FKModule(pl.LightningModule):
         plt.legend()
         plt.savefig('/scratch/xx84/girsanov/fbsde/comp_time_cnn.png')
         plt.clf()
-        #torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/fbsde/cnn_5d_girloss.pt')
+        torch.save(self.expmart_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/exp_cnn.pt')
+        torch.save(self.zt_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/zt_cnn.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -338,9 +339,9 @@ if __name__ == '__main__':
     T = 0.1
     t0 = 0.
     num_time = 40
-    dim = 6
+    dim = 1
     num_samples = 12000
-    batch_size = 30
+    batch_size = 25
     N = 4000
     xs = torch.rand(num_samples,dim) * X + x0
     ts = torch.rand(num_samples,1) * T
