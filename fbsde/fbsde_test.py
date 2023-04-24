@@ -394,7 +394,7 @@ if __name__ == '__main__':
     #dataset = MNIST(os.getcwd(), train=True, download=True, transform=transforms.ToTensor())
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
-    device = torch.device("cpu")
+    device = torch.device("cuda:0")
     
     gir_loss_min = []
     gir_loss_mean = []
@@ -418,7 +418,7 @@ if __name__ == '__main__':
     em_time_mean = []
     em_time_max = []
     
-    for i in range(1,30):
+    for i in range(1,40):
         
         m=100
         p=15
@@ -429,8 +429,8 @@ if __name__ == '__main__':
         num_time = 10 * i
         dim = 4
         num_samples = 420
-        batch_size = 10
-        N = 4000
+        batch_size = 5
+        N = 500
         xs = torch.rand(num_samples,dim) * X + x0
         ts = torch.rand(num_samples,1) * T
         dataset = torch.cat((xs,ts),dim=1)
@@ -451,7 +451,7 @@ if __name__ == '__main__':
         val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
         model = FKModule(m=m, p=p, X=X, t0=t0, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
-        trainer = pl.Trainer(max_epochs=1, gpus=0, check_val_every_n_epoch=1)
+        trainer = pl.Trainer(max_epochs=1, gpus=1, check_val_every_n_epoch=1)
         trainer.fit(model, train_loader, val_loader)
         
         gir_loss_min.append(trainer.logged_metrics['gir_loss_min'].item())
