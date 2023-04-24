@@ -40,7 +40,7 @@ def g(x):
     return torch.sin(2*np.pi*x).sum(-1)
 
 def h(t,x,y,z):
-    return torch.sin(x+z).sum(-1) + torch.cos(t+y)
+    return torch.sin(x+z).sum(-1) + torch.cos(t)
 
 class CNN(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, num_outputs):
@@ -144,8 +144,8 @@ class FKModule(pl.LightningModule):
         self.branch = MLP(input_dim=self.m, hidden_dim=100, output_dim=self.p) # branch network
         self.trunk = MLP(input_dim=dim+1, hidden_dim=50, output_dim=self.p) # trunk network
         self.sensors = g((torch.linspace(self.t0.item(), self.T.item(), self.m).unsqueeze(-1).repeat(1,self.dim) * self.X).to(device))
-        self.expmart_cnn = CNN1(input_size, hidden_size, num_layers, num_outputs)
-        self.zt_cnn = CNN1(input_size=dim+1, hidden_size=20, num_layers=3, num_outputs=self.dim)
+        self.expmart_cnn = CNN(input_size, hidden_size, num_layers, num_outputs)
+        self.zt_cnn = CNN1(input_size=dim+1, hidden_size=80, num_layers=3, num_outputs=self.dim)
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate
@@ -216,11 +216,11 @@ class FKModule(pl.LightningModule):
         time_gir = (end - start)
         # calculation with cnn
         
+        start = time.time()
         muBx = b(self.t, xi, coef)
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
         input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
-        start = time.time()
         cnn_expmart = self.relu(self.expmart_cnn(input_reshaped).sum(-2)).reshape(self.num_time, self.N, self.batch_size)
         
         
@@ -231,25 +231,22 @@ class FKModule(pl.LightningModule):
         
         yi = torch.zeros(self.num_time, self.N, self.batch_size).to(device)
         yi[-1,:,:] = yT
-        vi = yi[-1,:,:].mean(0)
         zi_cnn = torch.zeros_like(xi)
-        input_zi = torch.cat((yT.unsqueeze(-1),xT),dim=-1)
-        input_zi = input_zi.reshape(input_zi.shape[0] * input_zi.shape[1], input_zi.shape[2], 1)
-        z_current = self.zt_cnn(input_zi).reshape(xT.shape)
-        #z_current = sigma(torch.Tensor([T]),xT).to(device) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
-        zi_cnn[-1,:,:,:] = z_current
-        for i in reversed(range(1,self.num_time)):
-            x_current = xi[i,:,:,:]
-            t_current = self.t[i]
-            yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current) * self.dt * cnn_expmart[i-1,:,:]
-            vi = yi[i-1,:,:].mean(0)
-            input_zi = torch.cat((yi[i-1,:,:].unsqueeze(-1),x_current),dim=-1)
-            input_zi = input_zi.reshape(input_zi.shape[0] * input_zi.shape[1], input_zi.shape[2], 1)
-            z_current = sigma(t_current,x_current).to(device) * self.zt_cnn(input_zi).reshape(xT.shape)
-            #z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
-            zi_cnn[i-1,:,:,:] = z_current
-            
-        v_cnn = yi.mean(1)
+        input_zi = torch.cat((g(xi).unsqueeze(-1),xi),dim=-1)
+        input_zi = input_zi.reshape(input_zi.shape[1] * input_zi.shape[2], input_zi.shape[3], input_zi.shape[0])
+        zi_cnn = sigma(t_current,x_current).to(device) * self.zt_cnn(input_zi).reshape(xi.shape)
+        #z_current = zi_cnn[-1, :,:,:]
+        hi = h(self.t.unsqueeze(-1).unsqueeze(-1),xi,yi,zi_cnn) * self.dt * cnn_expmart
+        hi = torch.flip(hi,dims=[0])
+        yi_cumsum = yT + torch.cumsum(hi,dim=0)
+        #z_current = zi_cnn[-1, :,:,:]
+        #for i in reversed(range(1,self.num_time)):
+        #    x_current = xi[i,:,:,:]
+        #    t_current = self.t[i]
+        #    yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[`   i,:,:],z_current) * self.dt * cnn_expmart[i-1,:,:]
+        #    z_current = zi_cnn[i-1, :,:,:]
+        
+        v_cnn = torch.flip(yi_cumsum,dims=[0]).mean(1)
         end = time.time()
         time_cnn = (end - start)
         # calculation with don

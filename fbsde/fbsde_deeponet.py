@@ -40,7 +40,7 @@ def g(x):
     return torch.sin(2*np.pi*x).sum(-1)
 
 def h(t,x,y,z):
-    return torch.sin(x+z).sum(-1) + torch.cos(t+y)
+    return torch.sin(x+z).sum(-1) + torch.cos(t)
 
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
