@@ -39,8 +39,12 @@ def sigma(t,x):
 def g(x):
     return torch.sin(2*np.pi*x).sum(-1)
 
-def h(t,x,y,z):
-    return torch.sin(x+z).sum(-1) + torch.cos(t+y)
+def h(t,x,y,z,coef):
+    x0 = torch.sin(x).sum(-1)
+    x1 = (z ** 2).sum(-1)
+    x2 = torch.cos(t+y)
+    vals = torch.cat((x0.unsqueeze(-1),x1.unsqueeze(-1),x2.unsqueeze(-1)),axis=-1)
+    return (coef * vals).sum(-1)
 
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -115,7 +119,7 @@ class FKModule(pl.LightningModule):
         
         self.relu = torch.nn.Softplus()
 
-    def loss(self, xt, coef, em = False):
+    def loss(self, xt, coef, coef1, em = False):
         # calculation with girsanov
         xs = xt[:,:-1]
         ts = xt[:,-1]
@@ -139,7 +143,7 @@ class FKModule(pl.LightningModule):
         for i in reversed(range(1,self.num_time)):
             x_current = xi[i,:,:,:]
             t_current = self.t[i]
-            yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current) * self.dt * expmart[i-1,:,:]
+            yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current,coef1) * self.dt * expmart[i-1,:,:]
             vi = yi[i-1,:,:].mean(0)
             z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
             zi_gir[i-1,:,:,:] = z_current
@@ -180,7 +184,7 @@ class FKModule(pl.LightningModule):
             for i in reversed(range(1,self.num_time)):
                 x_current = xi[i,:,:,:]
                 t_current = self.t[i]
-                yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current) * self.dt
+                yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current,coef1) * self.dt
                 vi = yi[i-1,:,:].mean(0)
                 z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
                 zi_em[i-1,:,:,:] = z_current
@@ -194,7 +198,7 @@ class FKModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # REQUIRED
         xt = batch.to(device)
-        v_gir, v_don, v_em, time_gir, time_cnn, time_em = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), em=True)
+        v_gir, v_don, v_em, time_gir, time_cnn, time_em = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), coef1=torch.rand(1,1,1,3).to(device), em=True)
         
         #v_cnn = v_cnn[~torch.any(v_cnn.isnan(),dim=1)]
         #v_cnn = v_cnn[~torch.any(v_cnn.isnan(),dim=1)]
@@ -209,7 +213,7 @@ class FKModule(pl.LightningModule):
         #super().on_validation_model_eval(*args, **kwargs)
         torch.set_grad_enabled(True)
         xt = batch.to(device)
-        v_don, v_gir, v_em, time_gir, time_cnn, time_em = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), em=True)
+        v_don, v_gir, v_em, time_gir, time_cnn, time_em = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), coef1=torch.rand(1,1,1,3).to(device), em=True)
         loss = F.mse_loss(v_don,v_em,reduction='mean')/(torch.abs(v_em).mean())
         loss_g = F.mse_loss(v_gir,v_em,reduction='mean')/(torch.abs(v_em).mean())
         print('Validation: {:.4f}, {:.4f}'.format(loss, loss_g))

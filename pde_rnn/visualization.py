@@ -23,8 +23,14 @@ with open('/scratch/xx84/girsanov/pde_rnn/don_loss_min.npy', 'rb') as f:
     don_min = np.load(f)
 with open('/scratch/xx84/girsanov/pde_rnn/don_loss_max.npy', 'rb') as f:
     don_max = np.load(f)
+#with open('/scratch/xx84/girsanov/pde_rnn/em_loss_mean.npy', 'rb') as f:
+#    em_mean = np.load(f)
+#with open('/scratch/xx84/girsanov/pde_rnn/em_loss_min.npy', 'rb') as f:
+#    em_min = np.load(f)
+#with open('/scratch/xx84/girsanov/pde_rnn/em_loss_max.npy', 'rb') as f:
+#    em_max = np.load(f)
 
-ep = torch.arange(20) * 0.025
+ep = torch.arange(20) * 0.025 + 0.1
 
 plt.plot(ep, np.array(gir_mean), label='Girsanov', color='palevioletred')
 plt.fill_between(ep, np.array(gir_min), np.array(gir_max), alpha=0.2, color='lightpink')
@@ -33,12 +39,12 @@ plt.fill_between(ep, np.array(cnn_min), np.array(cnn_max), alpha=0.2, color='med
 plt.ylim(0, np.array(don_max).max()+0.2)
 plt.plot(ep, np.array(don_mean), label='DeepONet',color='darkslateblue')
 plt.fill_between(ep, np.array(don_min), np.array(don_max), alpha=0.2,color='slateblue')
-plt.plot(ep, ep * 0., label='Euler-Maruyama',color='darkorange')
-plt.fill_between(ep, ep * 0., ep * 0., alpha=0.2,color='bisque')
-plt.ylabel('Loss')
+#plt.plot(ep, np.array(em_mean), label='Euler-Maruyama',color='darkorange')
+#plt.fill_between(ep, np.array(em_min), np.array(em_max), alpha=0.2,color='bisque')
+plt.ylabel('Normalized Error')
 plt.xlabel('Terminal Time')
 plt.legend()
-plt.savefig('/scratch/xx84/girsanov/pde_rnn/loss_cnn.png')
+plt.savefig('/scratch/xx84/girsanov/pde_rnn/loss_cnn.pdf')
 plt.clf()
 
 
@@ -67,7 +73,7 @@ with open('/scratch/xx84/girsanov/pde_rnn/em_time_min.npy', 'rb') as f:
 with open('/scratch/xx84/girsanov/pde_rnn/em_time_max.npy', 'rb') as f:
     em_max = np.load(f)
 
-ep = torch.arange(20) * 0.025
+ep = torch.arange(20) * 0.025 + 0.1
 
 plt.plot(ep, np.array(gir_mean)*1e3, label='Girsanov', color='palevioletred')
 plt.fill_between(ep, np.array(gir_min)*1e3, np.array(gir_max)*1e3, alpha=0.2, color='lightpink')
@@ -81,5 +87,5 @@ plt.ylim(0, 0.015*1e3)
 plt.ylabel('Computation Time')
 plt.xlabel('Terminal Time')
 plt.legend()
-plt.savefig('/scratch/xx84/girsanov/pde_rnn/time_cnn.png')
+plt.savefig('/scratch/xx84/girsanov/pde_rnn/time_cnn.pdf')
 plt.clf()
