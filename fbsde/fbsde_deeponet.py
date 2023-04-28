@@ -39,12 +39,17 @@ def sigma(t,x):
 def g(x):
     return torch.sin(2*np.pi*x).sum(-1)
 
+<<<<<<< HEAD
 def h(t,x,y,z,coef):
     x0 = torch.sin(x).sum(-1)
     x1 = (z ** 2).sum(-1)
     x2 = torch.cos(t+y)
     vals = torch.cat((x0.unsqueeze(-1),x1.unsqueeze(-1),x2.unsqueeze(-1)),axis=-1)
     return (coef * vals).sum(-1)
+=======
+def h(t,x,y,z):
+    return torch.sin(x+z).sum(-1) + torch.cos(t)
+>>>>>>> d6504d75c14f1c71e51957edd167dce44790c957
 
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
