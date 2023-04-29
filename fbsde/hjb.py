@@ -233,7 +233,7 @@ class FKModule(pl.LightningModule):
             yi[-1,:,:] = yT
             vi = yT.mean(0)
             zi_em = torch.zeros_like(xi)
-            z_current = np.sqrt(2) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True,create_graph=True)[0]
+            z_current = np.sqrt(2) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
             zi_em[-1,:,:,:] = z_current
             for i in reversed(range(1,self.num_time)):
                 x_current = xi[i,:,:,:]
@@ -241,7 +241,7 @@ class FKModule(pl.LightningModule):
                 t_current.requires_grad = True
                 yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current, coef1) * self.dt
                 vi = yi[i-1,:,:].mean(0)
-                z_current = np.sqrt(2) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True,create_graph=True)[0]
+                z_current = np.sqrt(2) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
                 zi_em[i-1,:,:,:] = z_current
             v_em = yi.mean(1)
             end = time.time()
@@ -328,7 +328,7 @@ if __name__ == '__main__':
     #dataset = MNIST(os.getcwd(), train=True, download=True, transform=transforms.ToTensor())
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
-    device = torch.device("cpu")
+    device = torch.device("cuda:0")
     
     gir_loss_min = []
     gir_loss_mean = []
@@ -352,7 +352,7 @@ if __name__ == '__main__':
     em_time_mean = []
     em_time_max = []
     
-    for i in range(1,30):
+    for i in range(1,15):
         
         m=100
         p=15
@@ -385,7 +385,7 @@ if __name__ == '__main__':
         val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
         model = FKModule(m=m, p=p, X=X, t0=t0, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
-        trainer = pl.Trainer(max_epochs=1, gpus=0, check_val_every_n_epoch=1)
+        trainer = pl.Trainer(max_epochs=1, gpus=1, check_val_every_n_epoch=1)
         trainer.fit(model, train_loader, val_loader)
         
         cnn_loss_min.append(trainer.logged_metrics['cnn_loss_min'].item())
