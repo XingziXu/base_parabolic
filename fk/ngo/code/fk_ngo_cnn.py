@@ -224,7 +224,7 @@ class FKModule(pl.LightningModule):
         plt.legend()
         plt.savefig('/scratch/xx84/girsanov/fk/ngo/figure/ngo_train_comptime.png')
         plt.clf()
-        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/fk/trained_model/ngo_10d_girloss.pt')
+        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/fk/trained_model/ngo/ngo_10d_girloss.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):

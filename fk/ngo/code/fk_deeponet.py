@@ -175,8 +175,8 @@ class FKModule(pl.LightningModule):
         plt.legend()
         plt.savefig('/scratch/xx84/girsanov/fk/ngo/figure/don_train_girloss_don.png')
         plt.clf()
-        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fk/trained_model/branch_5d.pt')
-        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fk/trained_model/trunk_5d.pt')
+        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fk/ngo/trained_model/branch_5d.pt')
+        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fk/ngo/trained_model/trunk_5d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):

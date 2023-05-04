@@ -232,9 +232,9 @@ class FKModule(pl.LightningModule):
         
         
     def validation_step(self, batch, batch_idx):
-        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/trained_model/cnn_10d_girloss.pt'))
-        self.branch.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/trained_model/branch_5d.pt'))
-        self.trunk.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/trained_model/trunk_5d.pt'))
+        self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/ngo/trained_model/cnn_10d_girloss.pt'))
+        self.branch.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/ngo/trained_model/branch_5d.pt'))
+        self.trunk.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/ngo/trained_model/trunk_5d.pt'))
         xt = batch.to(device)
         u_em, u_gir, u_cnn, u_don, time_em, time_gir, time_cnn, time_don = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
         loss_cnn = F.mse_loss(u_cnn,u_em,reduction='mean')/(torch.abs(u_em).mean())

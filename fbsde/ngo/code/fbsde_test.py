@@ -313,10 +313,10 @@ class FKModule(pl.LightningModule):
         
     def validation_step(self, batch, batch_idx):
         #super().on_validation_model_eval(*args, **kwargs)
-        self.branch.load_state_dict(torch.load('/scratch/xx84/girsanov/fbsde/trained_model/branch_4d.pt'))
-        self.trunk.load_state_dict(torch.load('/scratch/xx84/girsanov/fbsde/trained_model/trunk_4d.pt'))
-        self.expmart_cnn.load_state_dict(torch.load('/scratch/xx84/girsanov/fbsde/trained_model/exp_cnn_4d.pt'))
-        self.zt_cnn.load_state_dict(torch.load('/scratch/xx84/girsanov/fbsde/trained_model/zt_cnn_4d.pt'))
+        self.branch.load_state_dict(torch.load('/scratch/xx84/girsanov/fbsde/ngo/trained_model/branch_4d.pt'))
+        self.trunk.load_state_dict(torch.load('/scratch/xx84/girsanov/fbsde/ngo/trained_model/trunk_4d.pt'))
+        self.expmart_cnn.load_state_dict(torch.load('/scratch/xx84/girsanov/ngo/fbsde/trained_model/exp_cnn_4d.pt'))
+        self.zt_cnn.load_state_dict(torch.load('/scratch/xx84/girsanov/fbsde/ngo/trained_model/zt_cnn_4d.pt'))
         torch.set_grad_enabled(True)
         xt = batch.to(device)
         v_gir, v_cnn, v_em, v_don, time_gir, time_cnn, time_em, time_don, zi_em, zi_cnn, zi_gir = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), coef1=torch.rand(1,1,1,3).to(device), em=True)
