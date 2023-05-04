@@ -1,3 +1,7 @@
+"""
+This code is designed to train ngo on high-dimensional setting, the difference between this and fbsde_ngo.py is that
+this one's 
+"""
 import torch
 from torch import nn
 from torch.autograd import grad
@@ -55,11 +59,11 @@ class CNN(nn.Module):
         self.act1 = nn.Softplus()
         self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
         self.act2 = nn.Softplus()
-        self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
-        #self.act3 = nn.Softplus()
-        #self.conv4 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
-        #self.act4 = nn.Softplus()
-        #self.conv5 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
+        self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act3 = nn.Softplus()
+        self.conv4 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act4 = nn.Softplus()
+        self.conv5 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
 	
     def forward(self, x):
         out = self.conv1(x)
@@ -67,10 +71,10 @@ class CNN(nn.Module):
         out = self.conv2(out)
         out = self.act2(out)
         out = self.conv3(out)
-        #out = self.act3(out)
-        #out = self.conv4(out)
-        #out = self.act4(out)
-        #out = self.conv5(out)
+        out = self.act3(out)
+        out = self.conv4(out)
+        out = self.act4(out)
+        out = self.conv5(out)
         return out
 
 class CNN1(nn.Module):
@@ -90,7 +94,13 @@ class CNN1(nn.Module):
         self.act5 = nn.Softplus()
         self.conv6 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
         self.act6 = nn.Softplus()
-        self.conv7 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
+        self.conv7 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act7 = nn.Softplus()
+        self.conv8 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act8 = nn.Softplus()
+        self.conv9 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act9 = nn.Softplus()
+        self.conv10 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
 	
     def forward(self, x):
         out = self.conv1(x)
@@ -106,6 +116,12 @@ class CNN1(nn.Module):
         out = self.conv6(out)
         out = self.act6(out)
         out = self.conv7(out)
+        out = self.act7(out)
+        out = self.conv8(out)
+        out = self.act8(out)
+        out = self.conv9(out)
+        out = self.act9(out)
+        out = self.conv10(out)
         return out
 
 class FKModule(pl.LightningModule):
@@ -126,7 +142,7 @@ class FKModule(pl.LightningModule):
         num_layers = 3
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
-        self.expmart_cnn = CNN1(input_size, hidden_size, num_layers, num_outputs)
+        self.expmart_cnn = CNN(input_size, hidden_size, num_layers, num_outputs)
         self.zt_cnn = CNN1(input_size=dim+1, hidden_size=20, num_layers=3, num_outputs=self.dim)
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
@@ -299,14 +315,14 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/figure/ngo_train_girloss_full.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/ngo/figure/ngo_train_girloss_full_10.png')
         plt.clf()
         plt.plot(ep, self.metrics.mean(-1), label='CNN')
         plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/figure/ngo_train_girloss_ngo.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/ngo/figure/ngo_train_girloss_ngo_10.png')
         plt.clf()
         plt.plot(ep, self.comp_time.mean(-1), label='EM')
         plt.fill_between(ep, self.comp_time.mean(-1) - self.comp_time.std(-1), self.comp_time.mean(-1) + self.comp_time.std(-1), alpha=0.2)
@@ -317,10 +333,10 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Computation Time')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/figure/ngo_train_comptime.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/ngo/figure/ngo_train_comptime.png')
         plt.clf()
-        torch.save(self.expmart_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/trained_model/exp_cnn_4d.pt')
-        torch.save(self.zt_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/trained_model/zt_cnn_4d.pt')
+        torch.save(self.expmart_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/trained_model/exp_cnn_10d.pt')
+        torch.save(self.zt_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/trained_model/zt_cnn_10d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -343,9 +359,9 @@ if __name__ == '__main__':
     T = 0.1
     t0 = 0.
     num_time = 40
-    dim = 50
+    dim = 10
     num_samples = 12000
-    batch_size = 10
+    batch_size = 20
     N = 4000
     xs = torch.rand(num_samples,dim) * X + x0
     ts = torch.rand(num_samples,1) * T
