@@ -26,16 +26,18 @@ with open('/scratch/xx84/girsanov/fbsde/don_loss_max.npy', 'rb') as f:
 
 ep = torch.arange(len(gir_mean)) * 0.025
 
-plt.plot(ep, np.array(gir_mean), label='Girsanov', color='palevioletred')
-plt.fill_between(ep, np.array(gir_min), np.array(gir_max), alpha=0.2, color='lightpink')
+#plt.plot(ep, np.array(em_mean), label='Girsanov', color='palevioletred')
+#plt.fill_between(ep, np.array(em_min), np.array(em_max), alpha=0.2, color='lightpink')
+
 plt.plot(ep, np.array(cnn_mean), label='NGO', color='darkcyan')
 plt.fill_between(ep, np.array(cnn_min), np.array(cnn_max), alpha=0.2, color='mediumturquoise')
-plt.ylim(0, np.array(don_max).max()+0.2)
+plt.plot(ep, np.array(gir_mean), label='Girsanov', color='palevioletred')
+plt.fill_between(ep, np.array(gir_min), np.array(gir_max), alpha=0.2, color='lightpink')
+#plt.ylim(0, np.array(don_max).max()+0.2)
+#plt.ylim(0., 1.)
 plt.plot(ep, np.array(don_mean), label='DeepONet',color='darkslateblue')
 plt.fill_between(ep, np.array(don_min), np.array(don_max), alpha=0.2,color='slateblue')
-plt.plot(ep, ep * 0., label='Euler-Maruyama',color='darkorange')
-plt.fill_between(ep, ep * 0., ep * 0., alpha=0.2,color='bisque')
-plt.ylabel('Loss')
+plt.ylabel('Normalized Error')
 plt.xlabel('Terminal Time')
 plt.legend()
 plt.savefig('/scratch/xx84/girsanov/fbsde/loss_cnn.png')
@@ -67,7 +69,7 @@ with open('/scratch/xx84/girsanov/fbsde/em_time_min.npy', 'rb') as f:
 with open('/scratch/xx84/girsanov/fbsde/em_time_max.npy', 'rb') as f:
     em_max = np.load(f)
 
-ep = torch.arange(len(gir_mean)) * 0.025
+ep = torch.arange(len(em_mean)) * 0.025
 
 plt.plot(ep, np.array(gir_mean)*1e3, label='Girsanov', color='palevioletred')
 plt.fill_between(ep, np.array(gir_min)*1e3, np.array(gir_max)*1e3, alpha=0.2, color='lightpink')
