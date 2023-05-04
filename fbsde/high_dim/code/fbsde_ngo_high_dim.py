@@ -25,7 +25,6 @@ import sys
 from random import randint
 import seaborn as sns 
 import pandas as pd
-from torchqrnn import QRNN
 import time
 
 
@@ -50,20 +49,20 @@ def h(t,x,y,z,coef):
     vals = torch.cat((x0.unsqueeze(-1),x1.unsqueeze(-1),x2.unsqueeze(-1)),axis=-1)
     return (coef * vals).sum(-1)
 
-class CNN(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, num_outputs):
-        super(CNN, self).__init__()
+class CNN_expmart(nn.Module):
+    def __init__(self, input_size, hidden_size, num_outputs):
+        super(CNN_expmart, self).__init__()
         #self.num_layers = num_layers
         #self.hidden_size = hidden_size
         self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
         self.act1 = nn.Softplus()
         self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
         self.act2 = nn.Softplus()
-        self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
-        self.act3 = nn.Softplus()
-        self.conv4 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
-        self.act4 = nn.Softplus()
-        self.conv5 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
+        self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
+        #self.act3 = nn.Softplus()
+        #self.conv4 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        #self.act4 = nn.Softplus()
+        #self.conv5 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
 	
     def forward(self, x):
         out = self.conv1(x)
@@ -71,15 +70,15 @@ class CNN(nn.Module):
         out = self.conv2(out)
         out = self.act2(out)
         out = self.conv3(out)
-        out = self.act3(out)
-        out = self.conv4(out)
-        out = self.act4(out)
-        out = self.conv5(out)
+        #out = self.act3(out)
+        #out = self.conv4(out)
+        #out = self.act4(out)
+        #out = self.conv5(out)
         return out
 
-class CNN1(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, num_outputs):
-        super(CNN1, self).__init__()
+class CNN_zt(nn.Module):
+    def __init__(self, input_size, hidden_size, num_outputs):
+        super(CNN_zt, self).__init__()
         #self.num_layers = num_layers
         #self.hidden_size = hidden_size
         self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
@@ -94,13 +93,7 @@ class CNN1(nn.Module):
         self.act5 = nn.Softplus()
         self.conv6 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
         self.act6 = nn.Softplus()
-        self.conv7 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
-        self.act7 = nn.Softplus()
-        self.conv8 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
-        self.act8 = nn.Softplus()
-        self.conv9 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
-        self.act9 = nn.Softplus()
-        self.conv10 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
+        self.conv7 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
 	
     def forward(self, x):
         out = self.conv1(x)
@@ -116,12 +109,6 @@ class CNN1(nn.Module):
         out = self.conv6(out)
         out = self.act6(out)
         out = self.conv7(out)
-        out = self.act7(out)
-        out = self.conv8(out)
-        out = self.act8(out)
-        out = self.conv9(out)
-        out = self.act9(out)
-        out = self.conv10(out)
         return out
 
 class FKModule(pl.LightningModule):
@@ -137,13 +124,13 @@ class FKModule(pl.LightningModule):
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = self.dim * 2 + 1
         # hidden_size is dimension of the RNN output
-        hidden_size = 80
+        hidden_size = 100
         # num_layers is the number of RNN blocks
         num_layers = 3
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
-        self.expmart_cnn = CNN(input_size, hidden_size, num_layers, num_outputs)
-        self.zt_cnn = CNN1(input_size=dim+1, hidden_size=20, num_layers=3, num_outputs=self.dim)
+        self.expmart_cnn = CNN_expmart(input_size, hidden_size, num_outputs)
+        self.zt_cnn = CNN_zt(input_size=dim+1, hidden_size=100, num_outputs=self.dim)
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate
@@ -361,7 +348,7 @@ if __name__ == '__main__':
     num_time = 40
     dim = 10
     num_samples = 12000
-    batch_size = 20
+    batch_size = 15
     N = 4000
     xs = torch.rand(num_samples,dim) * X + x0
     ts = torch.rand(num_samples,1) * T

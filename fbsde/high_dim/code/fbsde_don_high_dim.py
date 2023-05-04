@@ -232,14 +232,14 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/ngo/figure/don_train_girloss_full.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/don_train_girloss_full.png')
         plt.clf()
         plt.plot(ep, self.metrics.mean(-1), label='DeepONet')
         plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/ngo/figure/don_train_girloss_don.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/don_train_girloss_don.png')
         plt.clf()
         plt.plot(ep, self.comp_time.mean(-1), label='EM')
         plt.fill_between(ep, self.comp_time.mean(-1) - self.comp_time.std(-1), self.comp_time.mean(-1) + self.comp_time.std(-1), alpha=0.2)
@@ -250,10 +250,10 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Computation Time')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/comp_time_don.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/comp_time_don.png')
         plt.clf()
-        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fbsde/ngo/trained_model/branch_4d.pt')
-        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fbsde/ngo/trained_model/trunk_4d.pt')
+        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/branch_10d.pt')
+        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/trunk_10d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -276,7 +276,7 @@ if __name__ == '__main__':
     T = 0.1
     t0 = 0.
     num_time = 40
-    dim = 4
+    dim = 10
     num_samples = 12000
     batch_size = 80
     N = 4000

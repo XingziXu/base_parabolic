@@ -46,9 +46,9 @@ def h(t,x,y,z,coef):
     vals = torch.cat((x0.unsqueeze(-1),x1.unsqueeze(-1),x2.unsqueeze(-1)),axis=-1)
     return (coef * vals).sum(-1)
 
-class CNN(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, num_outputs):
-        super(CNN, self).__init__()
+class CNN_expmart(nn.Module):
+    def __init__(self, input_size, hidden_size, num_outputs):
+        super(CNN_expmart, self).__init__()
         #self.num_layers = num_layers
         #self.hidden_size = hidden_size
         self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
@@ -73,9 +73,9 @@ class CNN(nn.Module):
         #out = self.conv5(out)
         return out
 
-class CNN1(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, num_outputs):
-        super(CNN1, self).__init__()
+class CNN_zt(nn.Module):
+    def __init__(self, input_size, hidden_size, num_outputs):
+        super(CNN_zt, self).__init__()
         #self.num_layers = num_layers
         #self.hidden_size = hidden_size
         self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
@@ -126,8 +126,8 @@ class FKModule(pl.LightningModule):
         num_layers = 3
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
-        self.expmart_cnn = CNN(input_size, hidden_size, num_layers, num_outputs)
-        self.zt_cnn = CNN1(input_size=dim+1, hidden_size=20, num_layers=3, num_outputs=self.dim)
+        self.expmart_cnn = CNN_expmart(input_size, hidden_size, num_outputs)
+        self.zt_cnn = CNN_zt(input_size=dim+1, hidden_size=20, num_outputs=self.dim)
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate

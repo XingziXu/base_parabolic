@@ -5,23 +5,23 @@ import matplotlib
 
 matplotlib.rcParams.update({'font.size': 15})
 
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_cnn_loss_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_cnn_loss_mean.npy', 'rb') as f:
     cnn_mean = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_cnn_loss_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_cnn_loss_min.npy', 'rb') as f:
     cnn_min = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_cnn_loss_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_cnn_loss_max.npy', 'rb') as f:
     cnn_max = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_em_loss_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_em_loss_mean.npy', 'rb') as f:
     em_mean = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_em_loss_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_em_loss_min.npy', 'rb') as f:
     em_min = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_em_loss_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_em_loss_max.npy', 'rb') as f:
     em_max = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_don_loss_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_don_loss_mean.npy', 'rb') as f:
     don_mean = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_don_loss_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_don_loss_min.npy', 'rb') as f:
     don_min = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_don_loss_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_don_loss_max.npy', 'rb') as f:
     don_max = np.load(f)
 
 ep = torch.arange(len(em_mean)) * 0.025
@@ -39,27 +39,27 @@ plt.fill_between(ep, np.array(em_min), np.array(em_max), alpha=0.2,color='bisque
 plt.ylabel('Normalized Error')
 plt.xlabel('Terminal Time')
 plt.legend()
-plt.savefig('/scratch/xx84/girsanov/fbsde/bs/figure/bs_loss_cnn.png')
+plt.savefig('/scratch/xx84/girsanov/fbsde/bs/figure/10_bs_loss_cnn.png')
 plt.clf()
 
 
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_cnn_time_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_cnn_time_mean.npy', 'rb') as f:
     cnn_mean = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_cnn_time_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_cnn_time_min.npy', 'rb') as f:
     cnn_min = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_cnn_time_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_cnn_time_max.npy', 'rb') as f:
     cnn_max = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_don_time_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_don_time_mean.npy', 'rb') as f:
     don_mean = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_don_time_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_don_time_min.npy', 'rb') as f:
     don_min = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_don_time_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_don_time_max.npy', 'rb') as f:
     don_max = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_em_time_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_em_time_mean.npy', 'rb') as f:
     em_mean = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_em_time_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_em_time_min.npy', 'rb') as f:
     em_min = np.load(f)
-with open('/scratch/xx84/girsanov/fbsde/bs/result/bs_em_time_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fbsde/bs/result/10_bs_em_time_max.npy', 'rb') as f:
     em_max = np.load(f)
 
 ep = torch.arange(len(em_mean)) * 0.025
@@ -74,5 +74,5 @@ plt.ylim(0, 0.15*1e3)
 plt.ylabel('Computation Time')
 plt.xlabel('Terminal Time')
 plt.legend()
-plt.savefig('/scratch/xx84/girsanov/fbsde/bs/figure/bs_time_cnn.png')
+plt.savefig('/scratch/xx84/girsanov/fbsde/bs/figure/10_bs_time_cnn.png')
 plt.clf()
