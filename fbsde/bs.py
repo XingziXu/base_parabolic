@@ -21,7 +21,6 @@ import sys
 from random import randint
 import seaborn as sns 
 import pandas as pd
-from torchqrnn import QRNN
 import time
 
 
@@ -41,6 +40,9 @@ def h(t,x,y,z,coef,r,sigma):
 
 def sigma_back(x,sigma,z):
     return sigma * (x*z).sum(-1)
+
+def exact(T,t,r,sigma,x):
+    return torch.exp((r+sigma**2)*(T-t)).squeeze()*g(x)
 
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -189,7 +191,8 @@ class FKModule(pl.LightningModule):
         xs = xt[:,:-1]
         ts = xt[:,-1]
         sigmas = 0.1
-        xi = torch.cumsum(self.dB * sigmas,dim=0) + xs.unsqueeze(0).unsqueeze(0).repeat(self.num_time,N,1,1)
+        r = 0.05
+        xi = xs.unsqueeze(0).unsqueeze(0) * torch.exp(torch.cumsum(self.dB * sigmas,dim=0) - (sigmas ** 2) * self.t.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1))
         xi.requires_grad = True
         muBx = b(self.t, xi, coef)
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
@@ -203,16 +206,10 @@ class FKModule(pl.LightningModule):
         zi_cnn = torch.zeros_like(xi)
         input_zi = torch.cat((g(xi).unsqueeze(-1),xi),dim=-1)
         input_zi = input_zi.reshape(input_zi.shape[1] * input_zi.shape[2], input_zi.shape[3], input_zi.shape[0])
-        zi_cnn = np.sqrt(2) * self.zt_cnn(input_zi).reshape(xi.shape)
-        hi = h(self.t.unsqueeze(-1).unsqueeze(-1),xi,yi,zi_cnn,coef1) * self.dt * cnn_expmart
+        zi_cnn = self.zt_cnn(input_zi).reshape(xi.shape)
+        hi = h(self.t.unsqueeze(-1).unsqueeze(-1),xi,yi,zi_cnn,coef1,r,sigmas) * self.dt * cnn_expmart
         hi = torch.flip(hi,dims=[0])
         yi_cumsum = yT + torch.cumsum(hi,dim=0)
-        #z_current = zi_cnn[-1, :,:,:]
-        #for i in reversed(range(1,self.num_time)):
-        #    x_current = xi[i,:,:,:]
-        #    t_current = self.t[i]
-        #    yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[`   i,:,:],z_current) * self.dt * cnn_expmart[i-1,:,:]
-        #    z_current = zi_cnn[i-1, :,:,:]
         v_cnn = torch.flip(yi_cumsum,dims=[0]).mean(1)
         end = time.time()
         time_cnn = (end - start)
@@ -228,7 +225,7 @@ class FKModule(pl.LightningModule):
         time_don = (end - start)
         if em:
             # calculation with EM
-            xi = torch.cumsum(self.dB * sigmas,dim=0) + xs.unsqueeze(0).unsqueeze(0).repeat(self.num_time,N,1,1)
+            xi = xs.unsqueeze(0).unsqueeze(0) * torch.exp(torch.cumsum(self.dB * sigmas,dim=0) - (sigmas ** 2) * self.t.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1))
             xi.requires_grad = True
             xT = xi[-1,:,:,:]
             yT = g(xT)
@@ -236,27 +233,25 @@ class FKModule(pl.LightningModule):
             yi[-1,:,:] = yT
             vi = yT.mean(0)
             zi_em = torch.zeros_like(xi)
-            z_current = np.sqrt(2) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+            z_current = torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
             zi_em[-1,:,:,:] = z_current
             for i in reversed(range(1,self.num_time)):
                 x_current = xi[i,:,:,:]
                 t_current = self.t[i]
                 t_current.requires_grad = True
-                yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current, coef1) * self.dt
+                yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current,coef1,r,sigmas) * self.dt
                 vi = yi[i-1,:,:].mean(0)
-                z_current = np.sqrt(2) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+                z_current = torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
                 zi_em[i-1,:,:,:] = z_current
             v_em = yi.mean(1)
             end = time.time()
             time_em = (end - start)
             # calculate analytical solution
             v_gt = torch.zeros_like(v_cnn)
-            WT = self.B0[-1,:,:,:]
             for i in range(0,self.num_time):
-                Wt = self.B0[i,:,:,:]
-                WTt = WT-Wt
-                gs = g(xi[i,:,:,:]+np.sqrt(2)*WTt)
-                v_gt[i,:] = -torch.log(torch.exp(-gs).mean(0))
+                t_current = self.t[i].unsqueeze(0).unsqueeze(0).repeat(self.batch_size,1)
+                v_gt[i,:] = exact(self.T,t_current,r,sigmas,xs)
+                
                 
             return v_cnn, v_don, v_em, v_gt, time_cnn, time_don, time_em
         return v_cnn, v_don, v_gt, time_cnn, time_don
@@ -413,41 +408,41 @@ if __name__ == '__main__':
         #print(trainer.logged_metrics['val_loss'])
         #print(trainer.logged_metrics['train_loss'])
     #ep = torch.arange(18)
-        with open('/scratch/xx84/girsanov/fbsde/hjb_cnn_loss_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_cnn_loss_mean.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_mean))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_cnn_loss_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_cnn_loss_min.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_min))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_cnn_loss_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_cnn_loss_max.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_max))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_don_loss_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_don_loss_mean.npy', 'wb') as f:
             np.save(f, np.array(don_loss_mean))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_don_loss_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_don_loss_min.npy', 'wb') as f:
             np.save(f, np.array(don_loss_min))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_don_loss_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_don_loss_max.npy', 'wb') as f:
             np.save(f, np.array(don_loss_max))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_em_loss_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_em_loss_mean.npy', 'wb') as f:
             np.save(f, np.array(em_loss_mean))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_em_loss_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_em_loss_min.npy', 'wb') as f:
             np.save(f, np.array(em_loss_min))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_em_loss_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_em_loss_max.npy', 'wb') as f:
             np.save(f, np.array(em_loss_max))
         
-        with open('/scratch/xx84/girsanov/fbsde/hjb_cnn_time_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_cnn_time_mean.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_mean))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_cnn_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_cnn_time_min.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_min))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_cnn_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_cnn_time_max.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_max))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_don_time_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_don_time_mean.npy', 'wb') as f:
             np.save(f, np.array(don_time_mean))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_don_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_don_time_min.npy', 'wb') as f:
             np.save(f, np.array(don_time_min))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_don_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_don_time_max.npy', 'wb') as f:
             np.save(f, np.array(don_time_max))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_em_time_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_em_time_mean.npy', 'wb') as f:
             np.save(f, np.array(em_time_mean))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_em_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_em_time_min.npy', 'wb') as f:
             np.save(f, np.array(em_time_min))
-        with open('/scratch/xx84/girsanov/fbsde/hjb_em_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/bs_em_time_max.npy', 'wb') as f:
             np.save(f, np.array(em_time_max))
         
