@@ -126,8 +126,8 @@ class FKModule(pl.LightningModule):
         num_layers = 3
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
-        self.expmart_cnn = CNN(input_size, hidden_size, num_layers, num_outputs)
-        self.zt_cnn = CNN1(input_size=dim+1, hidden_size=80, num_layers=3, num_outputs=self.dim)
+        self.expmart_cnn = CNN1(input_size, hidden_size, num_layers, num_outputs)
+        self.zt_cnn = CNN1(input_size=dim+1, hidden_size=20, num_layers=3, num_outputs=self.dim)
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate
@@ -194,7 +194,6 @@ class FKModule(pl.LightningModule):
         end = time.time()
         time_gir = (end - start)
         # calculation with cnn
-        start = time.time()
         muBx = b(self.t, xi, coef)
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
         input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
@@ -209,27 +208,29 @@ class FKModule(pl.LightningModule):
         
         yi = torch.zeros(self.num_time, self.N, self.batch_size).to(device)
         yi[-1,:,:] = yT
+        vi = yi[-1,:,:].mean(0)
         zi_cnn = torch.zeros_like(xi)
-        input_zi = torch.cat((g(xi).unsqueeze(-1),xi),dim=-1)
-        input_zi = input_zi.reshape(input_zi.shape[1] * input_zi.shape[2], input_zi.shape[3], input_zi.shape[0])
-        zi_cnn = sigma(t_current,x_current).to(device) * self.zt_cnn(input_zi).reshape(xi.shape)
-        #z_current = zi_cnn[-1, :,:,:]
-        hi = h(self.t.unsqueeze(-1).unsqueeze(-1),xi,yi,zi_cnn,coef1) * self.dt * cnn_expmart
-        hi = torch.flip(hi,dims=[0])
-        yi_cumsum = yT + torch.cumsum(hi,dim=0)
-        #z_current = zi_cnn[-1, :,:,:]
-        #for i in reversed(range(1,self.num_time)):
-        #    x_current = xi[i,:,:,:]
-        #    t_current = self.t[i]
-        #    yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[`   i,:,:],z_current) * self.dt * cnn_expmart[i-1,:,:]
-        #    z_current = zi_cnn[i-1, :,:,:]
-        
-        v_cnn = torch.flip(yi_cumsum,dims=[0]).mean(1)
+        input_zi = torch.cat((yT.unsqueeze(-1),xT),dim=-1)
+        input_zi = input_zi.reshape(input_zi.shape[0] * input_zi.shape[1], input_zi.shape[2], 1)
+        z_current = self.zt_cnn(input_zi).reshape(xT.shape)
+        #z_current = sigma(torch.Tensor([T]),xT).to(device) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+        zi_cnn[-1,:,:,:] = z_current
+        for i in reversed(range(1,self.num_time)):
+            x_current = xi[i,:,:,:]
+            t_current = self.t[i]
+            yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current,coef1) * self.dt * cnn_expmart[i-1,:,:]
+            vi = yi[i-1,:,:].mean(0)
+            input_zi = torch.cat((yi[i-1,:,:].unsqueeze(-1),x_current),dim=-1)
+            input_zi = input_zi.reshape(input_zi.shape[0] * input_zi.shape[1], input_zi.shape[2], 1)
+            z_current = sigma(t_current,x_current).to(device) * self.zt_cnn(input_zi).reshape(xT.shape)
+            #z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+            zi_cnn[i-1,:,:,:] = z_current
+            
+        v_cnn = yi.mean(1)
         end = time.time()
         time_cnn = (end - start)
         if em:
             # calculation with EM
-            start = time.time()
             xs = xt[:,:-1]
             ts = xt[:,-1]
             xi= xs.unsqueeze(0).repeat(N,1,1)
@@ -250,7 +251,7 @@ class FKModule(pl.LightningModule):
             for i in reversed(range(1,self.num_time)):
                 x_current = xi[i,:,:,:]
                 t_current = self.t[i]
-                yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current,coef1) * self.dt
+                yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current, coef1) * self.dt
                 vi = yi[i-1,:,:].mean(0)
                 z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
                 zi_em[i-1,:,:,:] = z_current
@@ -298,14 +299,14 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/muBx_2d_cnn_gir.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/figure/ngo_train_girloss_full.png')
         plt.clf()
         plt.plot(ep, self.metrics.mean(-1), label='CNN')
         plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/muBx_2d_cnn.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/figure/ngo_train_girloss_ngo.png')
         plt.clf()
         plt.plot(ep, self.comp_time.mean(-1), label='EM')
         plt.fill_between(ep, self.comp_time.mean(-1) - self.comp_time.std(-1), self.comp_time.mean(-1) + self.comp_time.std(-1), alpha=0.2)
@@ -316,10 +317,10 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Computation Time')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/comp_time_cnn.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/figure/ngo_train_comptime.png')
         plt.clf()
-        torch.save(self.expmart_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/exp_cnn.pt')
-        torch.save(self.zt_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/zt_cnn.pt')
+        torch.save(self.expmart_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/trained_model/exp_cnn_4d.pt')
+        torch.save(self.zt_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/trained_model/zt_cnn_4d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -344,7 +345,7 @@ if __name__ == '__main__':
     num_time = 40
     dim = 4
     num_samples = 12000
-    batch_size = 20
+    batch_size = 25
     N = 4000
     xs = torch.rand(num_samples,dim) * X + x0
     ts = torch.rand(num_samples,1) * T

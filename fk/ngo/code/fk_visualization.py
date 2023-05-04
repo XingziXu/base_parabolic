@@ -5,23 +5,23 @@ import matplotlib
 
 matplotlib.rcParams.update({'font.size': 15})
 
-with open('/scratch/xx84/girsanov/pde_rnn/cnn_loss_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/cnn_loss_mean.npy', 'rb') as f:
     cnn_mean = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/cnn_loss_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/cnn_loss_min.npy', 'rb') as f:
     cnn_min = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/cnn_loss_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/cnn_loss_max.npy', 'rb') as f:
     cnn_max = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/gir_loss_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/gir_loss_mean.npy', 'rb') as f:
     gir_mean = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/gir_loss_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/gir_loss_min.npy', 'rb') as f:
     gir_min = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/gir_loss_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/gir_loss_max.npy', 'rb') as f:
     gir_max = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/don_loss_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/don_loss_mean.npy', 'rb') as f:
     don_mean = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/don_loss_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/don_loss_min.npy', 'rb') as f:
     don_min = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/don_loss_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/don_loss_max.npy', 'rb') as f:
     don_max = np.load(f)
 #with open('/scratch/xx84/girsanov/pde_rnn/em_loss_mean.npy', 'rb') as f:
 #    em_mean = np.load(f)
@@ -44,33 +44,33 @@ plt.fill_between(ep, np.array(don_min), np.array(don_max), alpha=0.2,color='slat
 plt.ylabel('Normalized Error')
 plt.xlabel('Terminal Time')
 plt.legend()
-plt.savefig('/scratch/xx84/girsanov/pde_rnn/loss_cnn.pdf')
+plt.savefig('/scratch/xx84/girsanov/fk/ngo/figure/loss_cnn.pdf')
 plt.clf()
 
 
-with open('/scratch/xx84/girsanov/pde_rnn/cnn_time_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/cnn_time_mean.npy', 'rb') as f:
     cnn_mean = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/cnn_time_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/cnn_time_min.npy', 'rb') as f:
     cnn_min = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/cnn_time_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/cnn_time_max.npy', 'rb') as f:
     cnn_max = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/gir_time_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/gir_time_mean.npy', 'rb') as f:
     gir_mean = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/gir_time_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/gir_time_min.npy', 'rb') as f:
     gir_min = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/gir_time_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/gir_time_max.npy', 'rb') as f:
     gir_max = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/don_time_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/don_time_mean.npy', 'rb') as f:
     don_mean = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/don_time_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/don_time_min.npy', 'rb') as f:
     don_min = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/don_time_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/don_time_max.npy', 'rb') as f:
     don_max = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/em_time_mean.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/em_time_mean.npy', 'rb') as f:
     em_mean = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/em_time_min.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/em_time_min.npy', 'rb') as f:
     em_min = np.load(f)
-with open('/scratch/xx84/girsanov/pde_rnn/em_time_max.npy', 'rb') as f:
+with open('/scratch/xx84/girsanov/fk/ngo/result/em_time_max.npy', 'rb') as f:
     em_max = np.load(f)
 
 ep = torch.arange(20) * 0.025 + 0.1
@@ -87,5 +87,5 @@ plt.ylim(0, 0.015*1e3)
 plt.ylabel('Computation Time')
 plt.xlabel('Terminal Time')
 plt.legend()
-plt.savefig('/scratch/xx84/girsanov/pde_rnn/time_cnn.pdf')
+plt.savefig('/scratch/xx84/girsanov/fk/ngo/figure/time_cnn.pdf')
 plt.clf()

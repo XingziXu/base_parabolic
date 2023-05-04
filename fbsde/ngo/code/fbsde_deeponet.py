@@ -232,14 +232,14 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/muBx_2d_don_gir.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/figure/don_train_girloss_full.png')
         plt.clf()
         plt.plot(ep, self.metrics.mean(-1), label='DeepONet')
         plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/muBx_2d_don.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/figure/don_train_girloss_don.png')
         plt.clf()
         plt.plot(ep, self.comp_time.mean(-1), label='EM')
         plt.fill_between(ep, self.comp_time.mean(-1) - self.comp_time.std(-1), self.comp_time.mean(-1) + self.comp_time.std(-1), alpha=0.2)
@@ -252,8 +252,8 @@ class FKModule(pl.LightningModule):
         plt.legend()
         plt.savefig('/scratch/xx84/girsanov/fbsde/comp_time_don.png')
         plt.clf()
-        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fbsde/branch_5d.pt')
-        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fbsde/trunk_5d.pt')
+        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fbsde/trained_model/branch_4d.pt')
+        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fbsde/trained_model/trunk_4d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):

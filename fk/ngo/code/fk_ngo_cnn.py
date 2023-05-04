@@ -64,37 +64,58 @@ class MLP(nn.Module):
     def forward(self, x):
         batch_size = x.shape[0]
         x = x.view(batch_size, -1)
-        h_1 = torch.tanh(self.input_fc(x))
-        h_2 = torch.tanh(self.hidden_fc(h_1))
+        h_1 = F.tanh(self.input_fc(x))
+        h_2 = F.tanh(self.hidden_fc(h_1))
         y_pred = self.output_fc(h_2)
         return y_pred
 
+class CNN(nn.Module):
+	def __init__(self, input_size, hidden_size, num_layers, num_outputs):
+		super(CNN, self).__init__()
+		#self.num_layers = num_layers
+		#self.hidden_size = hidden_size
+		self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
+		self.act1 = nn.Softplus()
+		self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+		self.act2 = nn.Softplus()
+		self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
+		self.act3 = nn.Softplus()
+	
+	def forward(self, x):
+		out = self.conv1(x)
+		out = self.act1(out)
+		out = self.conv2(out)
+		out = self.act2(out)
+		out = self.conv3(out)
+		#out = self.act3(out)
+		return out
+
 
 class FKModule(pl.LightningModule):
-    def __init__(self, m=100, dim=10, p=15, batch_size = 100, lr=1e-30, X=1.0, T=1.0, N=1000, num_time=50, n_batch_val=100):
+    def __init__(self, N = 2000, lr = 1e-3, X = 1., T = 0.1, dim = 2, batch_size = 100, num_time = 100, n_batch_val=100):
         super().__init__()
+        # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
         self.num_time = num_time
-        self.N = N # number of instances we estimate our PDE solutions with
-        self.X = X # interval size
-        self.T = T # time interval size
-        self.m = m # number of "sensors" for the function u
-        self.dim = dim # number of dimension of x
-        self.p = p # number of "branches"
-        self.lr = 1e-30 # learning rate
-        self.sensors = initial((torch.linspace(0., 1., self.m).unsqueeze(-1).repeat(1,self.dim) * self.X).to(device))
+        self.T = T
+        self.t = torch.linspace(0,1,steps=self.num_time)* self.T
+        self.dim = dim
         self.batch_size = batch_size
-        
-        self.branch = MLP(input_dim=self.m, hidden_dim=100, output_dim=self.p) # branch network
-        self.trunk = MLP(input_dim=dim+1, hidden_dim=50, output_dim=self.p) # trunk network
-        self.branch.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/branch_5d.pt'))
-        self.trunk.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/trunk_5d.pt'))
+        # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
+        input_size = self.dim * 2 + 1
+        # hidden_size is dimension of the RNN output
+        hidden_size = 80
+        # num_layers is the number of RNN blocks
+        num_layers = 3
+        # num_outputs is the number of ln(rho(x,t))
+        num_outputs = self.dim
+        self.sequence = CNN(input_size, hidden_size, num_layers, num_outputs)
+        #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate
         self.lr = lr
                 
         # define number of paths used and grid of PDE
         self.N = N
-        self.t = torch.linspace(0,1,steps=self.num_time)* self.T
         self.dt = self.t[1]-self.t[0] # define time step
 
         # define the brwonian motion starting at zero
@@ -104,12 +125,12 @@ class FKModule(pl.LightningModule):
         self.B0 = torch.Tensor(self.B0.cumsum(0)).to(device)
         self.dB = torch.Tensor(self.dB).to(device)
         
-        self.metrics = torch.zeros((1,n_batch_val))
-        self.gir_metrics = torch.zeros((1,n_batch_val))
-        self.comp_time = torch.zeros((1,n_batch_val))
-        self.gir_comp_time = torch.zeros((1,n_batch_val))
-        self.rnn_comp_time = torch.zeros((1,n_batch_val))
-        self.epochs = torch.linspace(0,0,1)
+        self.metrics = torch.zeros((50,n_batch_val))
+        self.gir_metrics = torch.zeros((50,n_batch_val))
+        self.comp_time = torch.zeros((50,n_batch_val))
+        self.gir_comp_time = torch.zeros((50,n_batch_val))
+        self.rnn_comp_time = torch.zeros((50,n_batch_val))
+        self.epochs = torch.linspace(0,49,50)
         
         self.relu = torch.nn.Softplus()
 
@@ -140,29 +161,22 @@ class FKModule(pl.LightningModule):
         u_gir = (p0Bx*expmart).mean(1)
         end = time.time()
         time_gir = (end - start)
-        # calculate values using deeponet
+        # calculate values using RNN
         start = time.time()
-        #branchs = self.branch(self.sensors.unsqueeze(0)).repeat(self.batch_size, 1)
-        #u_don = torch.zeros_like(u_em)
-        #for i in range(self.num_time-1):
-        #    trunks = self.trunk(torch.cat((xs,i*self.dt*torch.ones(xs.shape[0],1).to(device)),dim=1))
-        #    u_don[i,:] = (branchs * trunks).sum(1)
-        #end = time.time()
-        #time_rnn = (end - start)
-        branchs = self.branch(self.sensors.unsqueeze(0)).repeat(self.batch_size, 1)
-        u_don = torch.zeros_like(u_em)
-        for i in range(self.num_time-1):
-            trunks = self.trunk(torch.cat((xs,i*self.dt*torch.ones(xs.shape[0],1).to(device)),dim=1))
-            u_don[i,:] = (branchs * trunks).sum(1)
+        input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
+        input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
+        input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
+        rnn_expmart = self.relu(self.sequence(input_reshaped).sum(-2)).reshape(p0Bx.shape)
+        u_rnn = (p0Bx*rnn_expmart).mean(1)
+        end = time.time()
         time_rnn = (end - start)
-        
-        return u_em, u_gir, u_don, time_em, time_gir, time_rnn
+        return u_em, u_gir, u_rnn, time_em, time_gir, time_rnn
 
     def training_step(self, batch, batch_idx):
         # REQUIRED
         xt = batch.to(device)
         u_em, u_gir, u_rnn, time_em, time_gir, time_rnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
-        loss = F.l1_loss(u_rnn, u_gir)
+        loss = F.l1_loss(u_rnn, u_gir)#/(torch.abs(u_gir).mean())
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('train_loss', loss)
         #print(loss_total)
@@ -172,8 +186,8 @@ class FKModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         xt = batch.to(device)
         u_em, u_gir, u_rnn, time_em, time_gir, time_rnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
-        loss = torch.norm((u_rnn-u_em))/torch.norm(u_em)
-        loss_g = torch.norm((u_gir-u_em))/torch.norm(u_em)
+        loss = F.mse_loss(u_rnn,u_em,reduction='mean')/(torch.abs(u_em).mean())
+        loss_g = F.mse_loss(u_gir,u_em,reduction='mean')/(torch.abs(u_em).mean())
         print('Validation: {:.4f}, {:.4f}'.format(loss, loss_g))
         self.log('val_loss', loss)
         if not loss.isnan():
@@ -182,12 +196,6 @@ class FKModule(pl.LightningModule):
             self.comp_time[self.current_epoch, batch_idx] = time_em
             self.gir_comp_time[self.current_epoch, batch_idx] = time_gir
             self.rnn_comp_time[self.current_epoch, batch_idx] = time_rnn
-            self.log('gir_loss_min', self.gir_metrics[np.where(self.metrics!=0)].min())
-            self.log('gir_loss_mean', self.gir_metrics[np.where(self.metrics!=0)].mean())
-            self.log('gir_loss_max', self.gir_metrics[np.where(self.metrics!=0)].max())
-            self.log('rnn_loss_min', self.metrics[np.where(self.gir_metrics!=0)].min())
-            self.log('rnn_loss_mean', self.metrics[np.where(self.gir_metrics!=0)].mean())
-            self.log('rnn_loss_max', self.metrics[np.where(self.gir_metrics!=0)].max())
         ep = torch.arange(self.metrics.shape[0])
         plt.plot(ep, self.metrics.mean(-1), label='CNN')
         plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
@@ -196,14 +204,14 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('muBx_2d_cnn_gir.png')
+        plt.savefig('/scratch/xx84/girsanov/fk/ngo/figure/ngo_train_girloss_full.png')
         plt.clf()
         plt.plot(ep, self.metrics.mean(-1), label='CNN')
         plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('muBx_2d_cnn.png')
+        plt.savefig('/scratch/xx84/girsanov/fk/ngo/figure/ngo_train_girloss_ngo.png')
         plt.clf()
         plt.plot(ep, self.comp_time.mean(-1), label='EM')
         plt.fill_between(ep, self.comp_time.mean(-1) - self.comp_time.std(-1), self.comp_time.mean(-1) + self.comp_time.std(-1), alpha=0.2)
@@ -214,9 +222,9 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Computation Time')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('comp_time_rnn.png')
+        plt.savefig('/scratch/xx84/girsanov/fk/ngo/figure/ngo_train_comptime.png')
         plt.clf()
-        #torch.save(self.sequence.state_dict(), 'cnn_5d.pt')
+        torch.save(self.sequence.state_dict(), '/scratch/xx84/girsanov/fk/trained_model/ngo_10d_girloss.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -233,72 +241,37 @@ if __name__ == '__main__':
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
-    em_min = []
-    em_mean = []
-    em_max = []
-    gir_min = []
-    gir_mean = []
-    gir_max = []
-    don_min = []
-    don_mean = []
-    don_max = []
     
-    for i in range(1,19):
-        X = 0.5
-        T = i * 0.1
-        num_time = 50 * i
-        dim = 10
-        num_samples = 200
-        batch_size = 10
-        N = 500
-        xs = torch.rand(num_samples,dim) * X
-        ts = torch.rand(num_samples,1) * T
-        dataset = torch.cat((xs,ts),dim=1)
-        data_train = dataset[:2,:]
-        data_val = dataset[:,:]
-        
-        train_kwargs = {'batch_size': batch_size,
-                'shuffle': True,
-                'num_workers': 1}
+    x0 = 0.1
+    X = 0.5
+    T = 0.1
+    num_time = 40
+    dim = 10
+    num_samples = 12000
+    batch_size = 60
+    N = 4000
+    xs = torch.rand(num_samples,dim) * X + x0
+    ts = torch.rand(num_samples,1) * T
+    dataset = torch.cat((xs,ts),dim=1)
+    data_train = dataset[:num_samples// 2,:]
+    data_val = dataset[num_samples //2 :,:]
+    
+    train_kwargs = {'batch_size': batch_size,
+            'shuffle': True,
+            'num_workers': 1}
 
-        test_kwargs = {'batch_size': batch_size,
-                'shuffle': False,
-                'num_workers': 1}
+    test_kwargs = {'batch_size': batch_size,
+            'shuffle': False,
+            'num_workers': 1}
 
-        n_batch_val = int(num_samples / batch_size)
+    n_batch_val = int(num_samples // 2 / batch_size)
 
-        train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
-        val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
+    train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
+    val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
-        model = FKModule(X=X, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
-        trainer = pl.Trainer(max_epochs=1, gpus=1, check_val_every_n_epoch=1)
-        trainer.fit(model, train_loader, val_loader)
-        
-        gir_min.append(trainer.logged_metrics['gir_loss_min'].item())
-        gir_mean.append(trainer.logged_metrics['gir_loss_mean'].item())
-        gir_max.append(trainer.logged_metrics['gir_loss_max'].item())
-        don_min.append(trainer.logged_metrics['rnn_loss_min'].item())
-        don_mean.append(trainer.logged_metrics['rnn_loss_mean'].item())
-        don_max.append(trainer.logged_metrics['rnn_loss_max'].item())
-        #print(trainer.logged_metrics['val_loss'])
-        #print(trainer.logged_metrics['train_loss'])
-    with open('/scratch/xx84/girsanov/pde_rnn/cnn_loss_mean.npy', 'rb') as f:
-        cnn_mean = np.load(f)
-    with open('/scratch/xx84/girsanov/pde_rnn/cnn_loss_min.npy', 'rb') as f:
-        cnn_min = np.load(f)
-    with open('/scratch/xx84/girsanov/pde_rnn/cnn_loss_max.npy', 'rb') as f:
-        cnn_max = np.load(f)
-    ep = torch.arange(18)
-    plt.plot(ep, np.array(em_mean), label='EM')
-    plt.fill_between(ep, np.array(em_min), np.array(em_max), alpha=0.2)
-    plt.plot(ep, np.array(gir_mean), label='Direct Girsanov')
-    plt.fill_between(ep, np.array(gir_min), np.array(gir_max), alpha=0.2)
-    plt.plot(ep, np.array(don_mean), label='DeepONet')
-    plt.fill_between(ep, np.array(don_min), np.array(don_max), alpha=0.2)
-    plt.plot(ep, np.array(cnn_mean), label='CNN')
-    plt.fill_between(ep, np.array(cnn_min), np.array(cnn_max), alpha=0.2)
-    plt.ylabel('Loss')
-    plt.xlabel('Terminal Time')
-    plt.legend()
-    plt.savefig('loss_don.png')
-    plt.clf()
+    model = FKModule(X=X, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
+    trainer = pl.Trainer(max_epochs=50, gpus=1, check_val_every_n_epoch=1)
+    trainer.fit(model, train_loader, val_loader)
+    
+    print(trainer.logged_metrics['val_loss'])
+    print(trainer.logged_metrics['train_loss'])
