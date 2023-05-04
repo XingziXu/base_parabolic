@@ -346,7 +346,7 @@ if __name__ == '__main__':
     T = 0.1
     t0 = 0.
     num_time = 40
-    dim = 10
+    dim = 12
     num_samples = 12000
     batch_size = 15
     N = 4000

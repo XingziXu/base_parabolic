@@ -49,15 +49,19 @@ class MLP(nn.Module):
         super().__init__()
 
         self.input_fc = nn.Linear(input_dim, hidden_dim)
-        self.hidden_fc = nn.Linear(hidden_dim, hidden_dim)
+        self.hidden_fc1 = nn.Linear(hidden_dim, hidden_dim)
+        self.hidden_fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.hidden_fc3 = nn.Linear(hidden_dim, hidden_dim)
         self.output_fc = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
         batch_size = x.shape[0]
         x = x.view(batch_size, -1)
         h_1 = torch.tanh(self.input_fc(x))
-        h_2 = torch.tanh(self.hidden_fc(h_1))
-        y_pred = self.output_fc(h_2)
+        h_2 = torch.tanh(self.hidden_fc1(h_1))
+        h_3 = torch.tanh(self.hidden_fc2(h_2))
+        h_4 = torch.tanh(self.hidden_fc3(h_3))
+        y_pred = self.output_fc(h_4)
         return y_pred
 
 class CNN_expmart(nn.Module):
@@ -137,11 +141,11 @@ class FKModule(pl.LightningModule):
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = self.dim * 2 + 1
         # hidden_size is dimension of the RNN output
-        hidden_size = 80
+        hidden_size = 100
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
         self.expmart_cnn = CNN_expmart(input_size, hidden_size, num_outputs)
-        self.zt_cnn = CNN_zt(input_size=dim+1, hidden_size=80, num_outputs=self.dim)
+        self.zt_cnn = CNN_zt(input_size=dim+1, hidden_size=100, num_outputs=self.dim)
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         self.X = X

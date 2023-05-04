@@ -44,15 +44,19 @@ class MLP(nn.Module):
         super().__init__()
 
         self.input_fc = nn.Linear(input_dim, hidden_dim)
-        self.hidden_fc = nn.Linear(hidden_dim, hidden_dim)
+        self.hidden_fc1 = nn.Linear(hidden_dim, hidden_dim)
+        self.hidden_fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.hidden_fc3 = nn.Linear(hidden_dim, hidden_dim)
         self.output_fc = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
         batch_size = x.shape[0]
         x = x.view(batch_size, -1)
         h_1 = torch.tanh(self.input_fc(x))
-        h_2 = torch.tanh(self.hidden_fc(h_1))
-        y_pred = self.output_fc(h_2)
+        h_2 = torch.tanh(self.hidden_fc1(h_1))
+        h_3 = torch.tanh(self.hidden_fc2(h_2))
+        h_4 = torch.tanh(self.hidden_fc3(h_3))
+        y_pred = self.output_fc(h_4)
         return y_pred
 
 class CNN_expmart(nn.Module):
