@@ -1,3 +1,7 @@
+"""
+This code is designed to train ngo on high-dimensional setting, the difference between this and fbsde_ngo.py is that
+this one's 
+"""
 import torch
 from torch import nn
 from torch.autograd import grad
@@ -21,7 +25,6 @@ import sys
 from random import randint
 import seaborn as sns 
 import pandas as pd
-from torchqrnn import QRNN
 import time
 
 
@@ -46,50 +49,86 @@ def h(t,x,y,z,coef):
     vals = torch.cat((x0.unsqueeze(-1),x1.unsqueeze(-1),x2.unsqueeze(-1)),axis=-1)
     return (coef * vals).sum(-1)
 
-class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super().__init__()
-
-        self.input_fc = nn.Linear(input_dim, hidden_dim)
-        self.hidden_fc1 = nn.Linear(hidden_dim, hidden_dim)
-        self.hidden_fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.hidden_fc3 = nn.Linear(hidden_dim, hidden_dim)
-        self.output_fc = nn.Linear(hidden_dim, output_dim)
-
+class CNN_expmart(nn.Module):
+    def __init__(self, input_size, hidden_size, num_outputs):
+        super(CNN_expmart, self).__init__()
+        #self.num_layers = num_layers
+        #self.hidden_size = hidden_size
+        self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act1 = nn.Softplus()
+        self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act2 = nn.Softplus()
+        self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
+        #self.act3 = nn.Softplus()
+        #self.conv4 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        #self.act4 = nn.Softplus()
+        #self.conv5 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
+	
     def forward(self, x):
-        batch_size = x.shape[0]
-        x = x.view(batch_size, -1)
-        h_1 = torch.tanh(self.input_fc(x))
-        h_2 = torch.tanh(self.hidden_fc1(h_1))
-        h_3 = torch.tanh(self.hidden_fc2(h_2))
-        h_4 = torch.tanh(self.hidden_fc3(h_3))
-        y_pred = self.output_fc(h_4)
-        return y_pred
+        out = self.conv1(x)
+        out = self.act1(out)
+        out = self.conv2(out)
+        out = self.act2(out)
+        out = self.conv3(out)
+        #out = self.act3(out)
+        #out = self.conv4(out)
+        #out = self.act4(out)
+        #out = self.conv5(out)
+        return out
+
+class CNN_zt(nn.Module):
+    def __init__(self, input_size, hidden_size, num_outputs):
+        super(CNN_zt, self).__init__()
+        #self.num_layers = num_layers
+        #self.hidden_size = hidden_size
+        self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act1 = nn.Softplus()
+        self.conv2 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act2 = nn.Softplus()
+        self.conv3 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act3 = nn.Softplus()
+        self.conv4 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act4 = nn.Softplus()
+        self.conv5 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act5 = nn.Softplus()
+        self.conv6 = nn.Conv1d(in_channels=hidden_size, out_channels=hidden_size, kernel_size=1, padding=0)
+        self.act6 = nn.Softplus()
+        self.conv7 = nn.Conv1d(in_channels=hidden_size, out_channels=num_outputs, kernel_size=1, padding=0)
+	
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.act1(out)
+        out = self.conv2(out)
+        out = self.act2(out)
+        out = self.conv3(out)
+        out = self.act3(out)
+        out = self.conv4(out)
+        out = self.act4(out)
+        out = self.conv5(out)
+        out = self.act5(out)
+        out = self.conv6(out)
+        out = self.act6(out)
+        out = self.conv7(out)
+        return out
 
 class FKModule(pl.LightningModule):
-    def __init__(self, m=100, p=15, N = 2000, lr = 1e-3, X = 1., t0=0., T = 0.1, dim = 2, batch_size = 100, num_time = 100, n_batch_val=100):
+    def __init__(self, N = 2000, lr = 1e-3, X = 1., t0=0., T = 0.1, dim = 2, batch_size = 100, num_time = 100, n_batch_val=100):
         super().__init__()
         # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
         self.num_time = num_time
-        self.m = m
-        self.p = p
         self.T = torch.Tensor([T]).to(device)
         self.t0 = torch.Tensor([t0]).to(device)
         self.t = torch.linspace(self.t0.item(),self.T.item(),steps=self.num_time).to(device)
         self.dim = dim
         self.batch_size = batch_size
-        self.X = X
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = self.dim * 2 + 1
         # hidden_size is dimension of the RNN output
-        hidden_size = 80
-        # num_layers is the number of RNN blocks
-        num_layers = 3
+        hidden_size = 50 + self.dim * 5
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
-        self.branch = MLP(input_dim=self.m, hidden_dim=70+5*dim, output_dim=self.p) # branch network
-        self.trunk = MLP(input_dim=dim+1, hidden_dim=50+5*dim, output_dim=self.p) # trunk network
-        self.sensors = g((torch.linspace(self.t0.item(), self.T.item(), self.m).unsqueeze(-1).repeat(1,self.dim) * self.X).to(device))
+        self.expmart_cnn = CNN_expmart(input_size, hidden_size, num_outputs)
+        self.zt_cnn = CNN_zt(input_size=dim+1, hidden_size=50 + self.dim * 5, num_outputs=self.dim)
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate
@@ -124,7 +163,7 @@ class FKModule(pl.LightningModule):
         self.relu = torch.nn.Softplus()
 
     def loss(self, xt, coef, coef1, em = False):
-        # calculation with girsanov
+       # calculation with girsanov
         xs = xt[:,:-1]
         ts = xt[:,-1]
         sigmas = sigma(self.t[0],xs)
@@ -155,18 +194,43 @@ class FKModule(pl.LightningModule):
         v_gir = yi.mean(1)
         end = time.time()
         time_gir = (end - start)
-        # calculation with don
-        start = time.time()
-        branchs = self.branch(self.sensors.unsqueeze(0)).repeat(self.batch_size, 1)
-        v_don = torch.zeros(self.num_time, self.batch_size).to(device)
-        for i in range(self.num_time-1):
-            trunks = self.trunk(torch.cat((xs,i*self.dt*torch.ones(xs.shape[0],1).to(device)),dim=1))
-            v_don[i,:] = (branchs * trunks).sum(1)
-        v_don = v_don
+        # calculation with cnn
+        muBx = b(self.t, xi, coef)
+        input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
+        input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
+        input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
+        cnn_expmart = self.relu(self.expmart_cnn(input_reshaped).sum(-2)).reshape(self.num_time, self.N, self.batch_size)
+        
+        
+        xT = xi[-1,:,:,:]
+        yT = g(xT) * cnn_expmart[-1,:,:]
+        
+        #yT_cnn = (g(xi) * cnn_expmart).mean(1)
+        
+        yi = torch.zeros(self.num_time, self.N, self.batch_size).to(device)
+        yi[-1,:,:] = yT
+        vi = yi[-1,:,:].mean(0)
+        zi_cnn = torch.zeros_like(xi)
+        input_zi = torch.cat((yT.unsqueeze(-1),xT),dim=-1)
+        input_zi = input_zi.reshape(input_zi.shape[0] * input_zi.shape[1], input_zi.shape[2], 1)
+        z_current = self.zt_cnn(input_zi).reshape(xT.shape)
+        #z_current = sigma(torch.Tensor([T]),xT).to(device) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+        zi_cnn[-1,:,:,:] = z_current
+        for i in reversed(range(1,self.num_time)):
+            x_current = xi[i,:,:,:]
+            t_current = self.t[i]
+            yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current,coef1) * self.dt * cnn_expmart[i-1,:,:]
+            vi = yi[i-1,:,:].mean(0)
+            input_zi = torch.cat((yi[i-1,:,:].unsqueeze(-1),x_current),dim=-1)
+            input_zi = input_zi.reshape(input_zi.shape[0] * input_zi.shape[1], input_zi.shape[2], 1)
+            z_current = sigma(t_current,x_current).to(device) * self.zt_cnn(input_zi).reshape(xT.shape)
+            #z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
+            zi_cnn[i-1,:,:,:] = z_current
+            
+        v_cnn = yi.mean(1)
         end = time.time()
         time_cnn = (end - start)
         if em:
-            # calculation with EM
             # calculation with EM
             xs = xt[:,:-1]
             ts = xt[:,-1]
@@ -188,7 +252,7 @@ class FKModule(pl.LightningModule):
             for i in reversed(range(1,self.num_time)):
                 x_current = xi[i,:,:,:]
                 t_current = self.t[i]
-                yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current,coef1) * self.dt
+                yi[i-1,:,:] = yi[i,:,:] + h(t_current,x_current,yi[i,:,:],z_current, coef1) * self.dt
                 vi = yi[i-1,:,:].mean(0)
                 z_current = sigma(t_current,x_current).to(device) * torch.autograd.grad(outputs=vi,inputs=x_current,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
                 zi_em[i-1,:,:,:] = z_current
@@ -196,17 +260,17 @@ class FKModule(pl.LightningModule):
             v_em = yi.mean(1)
             end = time.time()
             time_em = (end - start)
-            return v_gir, v_don, v_em, time_gir, time_cnn, time_em
-        return v_gir, v_don, time_gir, time_cnn
+            return v_gir, v_cnn, v_em, time_gir, time_cnn, time_em, zi_em, zi_cnn, zi_gir
+        return v_gir, v_cnn, time_gir, time_cnn, zi_cnn, zi_gir
 
     def training_step(self, batch, batch_idx):
         # REQUIRED
         xt = batch.to(device)
-        v_gir, v_don, v_em, time_gir, time_cnn, time_em = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), coef1=torch.rand(1,1,1,3).to(device), em=True)
+        v_gir, v_cnn, v_em, time_gir, time_cnn, time_em, zi_em, zi_cnn, zi_gir = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), coef1=torch.rand(1,1,1,3).to(device), em=True)
         
         #v_cnn = v_cnn[~torch.any(v_cnn.isnan(),dim=1)]
         #v_cnn = v_cnn[~torch.any(v_cnn.isnan(),dim=1)]
-        loss = F.l1_loss(v_don, v_gir)#/(torch.abs(u_gir).mean())
+        loss = F.l1_loss(v_cnn, v_gir)+F.l1_loss(zi_cnn, zi_gir)#+F.l1_loss(zi_cnn, zi_em)+F.l1_loss(v_cnn, v_em)#/(torch.abs(u_gir).mean())
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('train_loss', loss)
         #print(loss_total)
@@ -217,8 +281,8 @@ class FKModule(pl.LightningModule):
         #super().on_validation_model_eval(*args, **kwargs)
         torch.set_grad_enabled(True)
         xt = batch.to(device)
-        v_don, v_gir, v_em, time_gir, time_cnn, time_em = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), coef1=torch.rand(1,1,1,3).to(device), em=True)
-        loss = F.mse_loss(v_don,v_em,reduction='mean')/(torch.abs(v_em).mean())
+        v_cnn, v_gir, v_em, time_gir, time_cnn, time_em, zi_em, zi_cnn, zi_gir = self.loss(xt, coef=torch.rand(1,1,1,3).to(device), coef1=torch.rand(1,1,1,3).to(device), em=True)
+        loss = F.mse_loss(v_cnn,v_em,reduction='mean')/(torch.abs(v_em).mean())
         loss_g = F.mse_loss(v_gir,v_em,reduction='mean')/(torch.abs(v_em).mean())
         print('Validation: {:.4f}, {:.4f}'.format(loss, loss_g))
         self.log('val_loss', loss)
@@ -229,35 +293,35 @@ class FKModule(pl.LightningModule):
             self.gir_comp_time[self.current_epoch, batch_idx] = time_gir
             self.cnn_comp_time[self.current_epoch, batch_idx] = time_cnn
         ep = torch.arange(self.metrics.shape[0])
-        plt.plot(ep, self.metrics.mean(-1), label='DeepONet')
+        plt.plot(ep, self.metrics.mean(-1), label='CNN')
         plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
         plt.plot(ep, self.gir_metrics.mean(-1), label='Direct Girsanov')
         plt.fill_between(ep, self.gir_metrics.mean(-1) - self.gir_metrics.std(-1), self.gir_metrics.mean(-1) + self.gir_metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/don_train_girloss_full.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/ablation/figure/ngo_train_girloss_full_1.png')
         plt.clf()
-        plt.plot(ep, self.metrics.mean(-1), label='DeepONet')
+        plt.plot(ep, self.metrics.mean(-1), label='CNN')
         plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/don_train_girloss_don.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/ablation/figure/ngo_train_girloss_ngo_1.png')
         plt.clf()
         plt.plot(ep, self.comp_time.mean(-1), label='EM')
         plt.fill_between(ep, self.comp_time.mean(-1) - self.comp_time.std(-1), self.comp_time.mean(-1) + self.comp_time.std(-1), alpha=0.2)
         plt.plot(ep, self.gir_comp_time.mean(-1), label='Direct Girsanov')
         plt.fill_between(ep, self.gir_comp_time.mean(-1) - self.gir_comp_time.std(-1), self.gir_comp_time.mean(-1) + self.gir_comp_time.std(-1), alpha=0.2)
-        plt.plot(ep, self.cnn_comp_time.mean(-1), label='DeepONetN')
+        plt.plot(ep, self.cnn_comp_time.mean(-1), label='CNN')
         plt.fill_between(ep, self.cnn_comp_time.mean(-1) - self.cnn_comp_time.std(-1), self.cnn_comp_time.mean(-1) + self.cnn_comp_time.std(-1), alpha=0.2)
         plt.ylabel('Computation Time')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/don_train_comptime_10.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/ablation/figure/ngo_train_comptime_1.png')
         plt.clf()
-        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/branch_10d.pt')
-        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/trunk_10d.pt')
+        torch.save(self.expmart_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/ablation/trained_model/exp_cnn_1d.pt')
+        torch.save(self.zt_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/ablation/trained_model/zt_cnn_1d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -280,12 +344,10 @@ if __name__ == '__main__':
     T = 0.1
     t0 = 0.
     num_time = 40
-    dim = 10
+    dim = 12
     num_samples = 12000
-    batch_size = 80
+    batch_size = 15
     N = 4000
-    m=100
-    p=15
     xs = torch.rand(num_samples,dim) * X + x0
     ts = torch.rand(num_samples,1) * T
     dataset = torch.cat((xs,ts),dim=1)
@@ -305,7 +367,7 @@ if __name__ == '__main__':
     train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
     val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
-    model = FKModule(m=m, p=p, X=X, t0=t0, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
+    model = FKModule(X=X, t0=t0, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
     trainer = pl.Trainer(max_epochs=50, gpus=1, check_val_every_n_epoch=1)
     trainer.fit(model, train_loader, val_loader)
     
