@@ -28,8 +28,9 @@ import pandas as pd
 import time
 
 
-def b(t,x, coef):
+def b(t,x, coef, dim):
     x = x.unsqueeze(-1)
+    x = x/dim
     x0 = x ** 0
     x1 = x ** 1
     x2 = x ** 2
@@ -124,13 +125,11 @@ class FKModule(pl.LightningModule):
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = self.dim * 2 + 1
         # hidden_size is dimension of the RNN output
-        hidden_size = 100
-        # num_layers is the number of RNN blocks
-        num_layers = 3
+        hidden_size = 50 + self.dim * 5
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
         self.expmart_cnn = CNN_expmart(input_size, hidden_size, num_outputs)
-        self.zt_cnn = CNN_zt(input_size=dim+1, hidden_size=100, num_outputs=self.dim)
+        self.zt_cnn = CNN_zt(input_size=dim+1, hidden_size=50 + self.dim * 5, num_outputs=self.dim)
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
         # define the learning rate
@@ -172,7 +171,7 @@ class FKModule(pl.LightningModule):
         xi = torch.cumsum(self.dB * sigmas.unsqueeze(0).unsqueeze(0),dim=0) + xs.unsqueeze(0).unsqueeze(0).repeat(self.num_time,N,1,1)
         xi.requires_grad = True
         sigmas = sigma(self.t.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1), xi)
-        mu = b(self.t, xi, coef)/sigmas
+        mu = b(self.t, xi, coef, dim=self.dim)/sigmas
         start = time.time()
         mart = torch.cumsum(mu * self.dB, dim=-1) - 0.5 * torch.cumsum(mu ** 2, dim=-1) * self.dt
         expmart = torch.exp(mart.sum(-1))
@@ -197,7 +196,7 @@ class FKModule(pl.LightningModule):
         end = time.time()
         time_gir = (end - start)
         # calculation with cnn
-        muBx = b(self.t, xi, coef)
+        muBx = b(self.t, xi, coef, dim=self.dim)
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
         input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
@@ -240,7 +239,7 @@ class FKModule(pl.LightningModule):
             xi = xi.unsqueeze(0)
             xi.requires_grad = True
             for i in range(0,self.num_time-1):
-                x_current = xi[i,:,:,:] + b(self.t[i], xi[i,:,:,:], coef) * self.dt + sigma(self.t[i], xi[i,:,:,:]).to(device) * self.dB[i,:,:,:]
+                x_current = xi[i,:,:,:] + b(self.t[i], xi[i,:,:,:], coef, dim=self.dim) * self.dt + sigma(self.t[i], xi[i,:,:,:]).to(device) * self.dB[i,:,:,:]
                 xi = torch.cat((xi, x_current.unsqueeze(0)),dim=0)
             
             xT = xi[-1,:,:,:]
@@ -302,14 +301,14 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/ngo_train_girloss_full_10.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/ngo_train_girloss_full_14.png')
         plt.clf()
         plt.plot(ep, self.metrics.mean(-1), label='CNN')
         plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/ngo_train_girloss_ngo_10.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/ngo_train_girloss_ngo_14.png')
         plt.clf()
         plt.plot(ep, self.comp_time.mean(-1), label='EM')
         plt.fill_between(ep, self.comp_time.mean(-1) - self.comp_time.std(-1), self.comp_time.mean(-1) + self.comp_time.std(-1), alpha=0.2)
@@ -320,10 +319,10 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Computation Time')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/ngo_train_comptime_10.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/ngo_train_comptime_14.png')
         plt.clf()
-        torch.save(self.expmart_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/exp_cnn_10d.pt')
-        torch.save(self.zt_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/zt_cnn_10d.pt')
+        torch.save(self.expmart_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/exp_cnn_14d.pt')
+        torch.save(self.zt_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/zt_cnn_14d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -346,9 +345,9 @@ if __name__ == '__main__':
     T = 0.1
     t0 = 0.
     num_time = 40
-    dim = 12
+    dim = 14
     num_samples = 12000
-    batch_size = 15
+    batch_size = 10
     N = 4000
     xs = torch.rand(num_samples,dim) * X + x0
     ts = torch.rand(num_samples,1) * T
@@ -370,8 +369,9 @@ if __name__ == '__main__':
     val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
     model = FKModule(X=X, t0=t0, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
-    trainer = pl.Trainer(max_epochs=50, gpus=1, check_val_every_n_epoch=1)
+    trainer = pl.Trainer(max_epochs=20, gpus=1, check_val_every_n_epoch=1)
     trainer.fit(model, train_loader, val_loader)
     
     print(trainer.logged_metrics['val_loss'])
     print(trainer.logged_metrics['train_loss'])
+
