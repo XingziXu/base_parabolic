@@ -115,14 +115,12 @@ class FKModule(pl.LightningModule):
         self.batch_size = batch_size
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = self.dim * 2 + 1
-        # hidden_size is dimension of the RNN output
-        hidden_size = 80
         # num_layers is the number of RNN blocks
         num_layers = 3
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
-        self.expmart_cnn = CNN_expmart(input_size, hidden_size, num_outputs)
-        self.expmart_cnn.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/high_dim/trained_model/ngo_20d.pt'))
+        self.expmart_cnn = CNN_expmart(input_size, 50 + self.dim * 5, num_outputs)
+        self.expmart_cnn.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/high_dim/trained_model/ngo_'+str(self.dim)+'.pt'))
 
         # define the learning rate
         self.lr = 1e-30
@@ -178,39 +176,42 @@ class FKModule(pl.LightningModule):
         self.sensors = initial((torch.linspace(0., 1., self.m).unsqueeze(-1).repeat(1,self.dim) * self.X).to(device))
         self.branch = MLP(input_dim=self.m, hidden_dim=70+5*dim, output_dim=self.p) # branch network
         self.trunk = MLP(input_dim=dim+1, hidden_dim=50+5*dim, output_dim=self.p) # trunk network
-        self.branch.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/high_dim/trained_model/branch_20d.pt'))
-        self.trunk.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/high_dim/trained_model/trunk_20d.pt'))
+        self.branch.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/high_dim/trained_model/branch_'+str(self.dim)+'.pt'))
+        self.trunk.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/high_dim/trained_model/trunk_'+str(self.dim)+'.pt'))
 
     def loss(self, xt, coef):
         xs = xt[:,:-1]
         ts = xt[:,-1]
         coef = coef
-        Bx = (xs.unsqueeze(0).unsqueeze(0)+self.B0)
-        p0Bx = initial(Bx)
         # calculate values using euler-maruyama
         start = time.time()
         x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
         x[0,:,:,:] = xs.squeeze()
         for i in range(self.num_time-1):
-            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef, self.dim).squeeze() * self.dt + self.dB[i,:,:,:]
+            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef, self.dim).squeeze() * self.dt + self.dB_em[i,:,:,:]
         p0mux = initial(x)
         u_em = p0mux.mean(1)
         end = time.time()
         time_em = (end - start)
         # calculate values using girsanov
+        Bx_gir = (xs.unsqueeze(0).unsqueeze(0)+self.B0_gir)
+        p0Bx_gir = initial(Bx_gir)
         start = time.time()
-        muBx = drift(Bx, coef, self.dim)
-        expmart = torch.exp((torch.cumsum(muBx*self.dB,dim=0) - 0.5 * torch.cumsum((muBx ** 2) * self.dt,dim=0)).sum(-1))
-        u_gir = (p0Bx*expmart).mean(1)
+        muBx_gir = drift(Bx_gir, coef, self.dim)
+        expmart = torch.exp((torch.cumsum(muBx_gir*self.dB_gir,dim=0) - 0.5 * torch.cumsum((muBx_gir ** 2) * self.dt,dim=0)).sum(-1))
+        u_gir = (p0Bx_gir*expmart).mean(1)
         end = time.time()
         time_gir = (end - start)
         # calculate values using RNN
-        start = time.time()
+        Bx_cnn = (xs.unsqueeze(0).unsqueeze(0)+self.B0_cnn)
+        p0Bx_cnn = initial(Bx_cnn)
+        muBx_cnn = drift(Bx_gir, coef, self.dim)
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
-        input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
+        input[:muBx_cnn.shape[0],:,:,:] = torch.cat((muBx_cnn,self.dB_cnn,self.dt*torch.ones(self.dB_cnn.shape[0],self.dB_cnn.shape[1],self.dB_cnn.shape[2],1).to(device)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
-        cnn_expmart = self.relu(self.expmart_cnn(input_reshaped).sum(-2)).reshape(p0Bx.shape)
-        u_cnn = (p0Bx*cnn_expmart).mean(1)
+        start = time.time()
+        cnn_expmart = self.relu(self.expmart_cnn(input_reshaped).sum(-2)).reshape(p0Bx_cnn.shape)
+        u_cnn = (p0Bx_cnn*cnn_expmart).mean(1)
         end = time.time()
         time_cnn = (end - start)
         # calculate values using deeponet
