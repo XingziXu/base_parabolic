@@ -25,11 +25,12 @@ from torchqrnn import QRNN
 import time
 
 
-def b(t,x, coef):
+def b(t,x, coef, dim):
     x = x.unsqueeze(-1)
-    x0 = x ** 0
-    x1 = x ** 1
-    x2 = x ** 2
+    #x = x/dim
+    x0 = (x ** 0)/dim
+    x1 = torch.sin(x)/dim
+    x2 = torch.cos(x)/dim
     vals = torch.cat((x0,x1,x2),axis=-1)
     return (coef * vals).sum(-1)
 
@@ -87,8 +88,8 @@ class FKModule(pl.LightningModule):
         num_layers = 3
         # num_outputs is the number of ln(rho(x,t))
         num_outputs = self.dim
-        self.branch = MLP(input_dim=self.m, hidden_dim=120, output_dim=self.p) # branch network
-        self.trunk = MLP(input_dim=dim+1, hidden_dim=100, output_dim=self.p) # trunk network
+        self.branch = MLP(input_dim=self.m, hidden_dim=70+5*dim, output_dim=self.p) # branch network
+        self.trunk = MLP(input_dim=dim+1, hidden_dim=50+5*dim, output_dim=self.p) # trunk network
         self.sensors = g((torch.linspace(self.t0.item(), self.T.item(), self.m).unsqueeze(-1).repeat(1,self.dim) * self.X).to(device))
         #self.sequence.load_state_dict(torch.load('/scratch/xx84/girsanov/pde_rnn/rnn_prior.pt'))
 
@@ -131,7 +132,7 @@ class FKModule(pl.LightningModule):
         xi = torch.cumsum(self.dB * sigmas.unsqueeze(0).unsqueeze(0),dim=0) + xs.unsqueeze(0).unsqueeze(0).repeat(self.num_time,N,1,1)
         xi.requires_grad = True
         sigmas = sigma(self.t.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1), xi)
-        mu = b(self.t, xi, coef)/sigmas
+        mu = b(self.t, xi, coef, self.dim)/sigmas
         start = time.time()
         mart = torch.cumsum(mu * self.dB, dim=-1) - 0.5 * torch.cumsum(mu ** 2, dim=-1) * self.dt
         expmart = torch.exp(mart.sum(-1))
@@ -174,7 +175,7 @@ class FKModule(pl.LightningModule):
             xi = xi.unsqueeze(0)
             xi.requires_grad = True
             for i in range(0,self.num_time-1):
-                x_current = xi[i,:,:,:] + b(self.t[i], xi[i,:,:,:], coef) * self.dt + sigma(self.t[i], xi[i,:,:,:]).to(device) * self.dB[i,:,:,:]
+                x_current = xi[i,:,:,:] + b(self.t[i], xi[i,:,:,:], coef, self.dim) * self.dt + sigma(self.t[i], xi[i,:,:,:]).to(device) * self.dB[i,:,:,:]
                 xi = torch.cat((xi, x_current.unsqueeze(0)),dim=0)
             
             xT = xi[-1,:,:,:]
@@ -236,14 +237,14 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/don_train_girloss_full.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/don_train_girloss_full_20.png')
         plt.clf()
         plt.plot(ep, self.metrics.mean(-1), label='DeepONet')
         plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/don_train_girloss_don.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/don_train_girloss_don_20.png')
         plt.clf()
         plt.plot(ep, self.comp_time.mean(-1), label='EM')
         plt.fill_between(ep, self.comp_time.mean(-1) - self.comp_time.std(-1), self.comp_time.mean(-1) + self.comp_time.std(-1), alpha=0.2)
@@ -254,10 +255,10 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Computation Time')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/don_train_comptime_10.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/don_train_comptime_20.png')
         plt.clf()
-        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/branch_10d.pt')
-        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/trunk_10d.pt')
+        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/branch_20d.pt')
+        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/trunk_20d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -280,9 +281,9 @@ if __name__ == '__main__':
     T = 0.1
     t0 = 0.
     num_time = 40
-    dim = 10
+    dim = 20
     num_samples = 12000
-    batch_size = 80
+    batch_size = 40
     N = 4000
     m=100
     p=15
@@ -306,7 +307,7 @@ if __name__ == '__main__':
     val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
     model = FKModule(m=m, p=p, X=X, t0=t0, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
-    trainer = pl.Trainer(max_epochs=50, gpus=1, check_val_every_n_epoch=1)
+    trainer = pl.Trainer(max_epochs=20, gpus=1, check_val_every_n_epoch=1)
     trainer.fit(model, train_loader, val_loader)
     
     print(trainer.logged_metrics['val_loss'])

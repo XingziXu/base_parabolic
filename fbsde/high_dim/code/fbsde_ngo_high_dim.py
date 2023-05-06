@@ -30,10 +30,10 @@ import time
 
 def b(t,x, coef, dim):
     x = x.unsqueeze(-1)
-    x = x/dim
-    x0 = x ** 0
-    x1 = x ** 1
-    x2 = x ** 2
+    #x = x/dim
+    x0 = (x ** 0)/dim
+    x1 = (torch.sin(x))/dim
+    x2 = torch.cos(x)/dim
     vals = torch.cat((x0,x1,x2),axis=-1)
     return (coef * vals).sum(-1)
 
@@ -301,14 +301,14 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/ngo_train_girloss_full_14.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/ngo_train_girloss_full_20.png')
         plt.clf()
         plt.plot(ep, self.metrics.mean(-1), label='CNN')
         plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/ngo_train_girloss_ngo_14.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/ngo_train_girloss_ngo_20.png')
         plt.clf()
         plt.plot(ep, self.comp_time.mean(-1), label='EM')
         plt.fill_between(ep, self.comp_time.mean(-1) - self.comp_time.std(-1), self.comp_time.mean(-1) + self.comp_time.std(-1), alpha=0.2)
@@ -319,10 +319,10 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Computation Time')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/ngo_train_comptime_14.png')
+        plt.savefig('/scratch/xx84/girsanov/fbsde/high_dim/figure/ngo_train_comptime_20.png')
         plt.clf()
-        torch.save(self.expmart_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/exp_cnn_14d.pt')
-        torch.save(self.zt_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/zt_cnn_14d.pt')
+        torch.save(self.expmart_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/exp_cnn_20d.pt')
+        torch.save(self.zt_cnn.state_dict(), '/scratch/xx84/girsanov/fbsde/high_dim/trained_model/zt_cnn_20d.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -345,7 +345,7 @@ if __name__ == '__main__':
     T = 0.1
     t0 = 0.
     num_time = 40
-    dim = 14
+    dim = 20
     num_samples = 12000
     batch_size = 10
     N = 4000
