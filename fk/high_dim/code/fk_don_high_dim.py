@@ -21,26 +21,22 @@ import sys
 from random import randint
 import seaborn as sns 
 import pandas as pd
-from torchqrnn import QRNN
 
-D_IDX = -1
-T_IDX = -2
-N_IDX =  0
-
-def drift(x, coef):
+def drift(x, coef, dim):
     x = x.unsqueeze(-1)
-    x0 = x ** 0
-    x1 = x ** 1
-    x2 = x ** 2
+    #x = x/dim
+    x0 = (x ** 0)
+    x1 = (x ** 1)
+    x2 = (x ** 2)
     vals = torch.cat((x0,x1,x2),axis=-1)
     return (coef * vals).sum(-1)
 
 def diffusion(x,t):
     return 1
+
 def initial(x):
     return torch.sin(6*np.pi*x).sum(-1)
-def initial_val(x):
-    return torch.sin(1*np.pi*x)
+
 def r_value():
     return 1
 
@@ -55,17 +51,20 @@ class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
 
-        self.act = Swish()
         self.input_fc = nn.Linear(input_dim, hidden_dim)
-        self.hidden_fc = nn.Linear(hidden_dim, hidden_dim)
+        self.hidden_fc1 = nn.Linear(hidden_dim, hidden_dim)
+        self.hidden_fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.hidden_fc3 = nn.Linear(hidden_dim, hidden_dim)
         self.output_fc = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
         batch_size = x.shape[0]
         x = x.view(batch_size, -1)
         h_1 = torch.tanh(self.input_fc(x))
-        h_2 = torch.tanh(self.hidden_fc(h_1))
-        y_pred = self.output_fc(h_2)
+        h_2 = torch.tanh(self.hidden_fc1(h_1))
+        h_3 = torch.tanh(self.hidden_fc2(h_2))
+        h_4 = torch.tanh(self.hidden_fc3(h_3))
+        y_pred = self.output_fc(h_4)
         return y_pred
 
 
@@ -83,8 +82,8 @@ class FKModule(pl.LightningModule):
         self.sensors = initial((torch.linspace(0., 1., self.m).unsqueeze(-1).repeat(1,self.dim) * self.X).to(device))
         self.batch_size = batch_size
         
-        self.branch = MLP(input_dim=self.m, hidden_dim=100, output_dim=self.p) # branch network
-        self.trunk = MLP(input_dim=dim+1, hidden_dim=50, output_dim=self.p) # trunk network
+        self.branch = MLP(input_dim=self.m, hidden_dim=70+5*dim, output_dim=self.p) # branch network
+        self.trunk = MLP(input_dim=dim+1, hidden_dim=50+5*dim, output_dim=self.p) # trunk network
 
         # define the learning rate
         self.lr = lr
@@ -121,11 +120,11 @@ class FKModule(pl.LightningModule):
         x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
         x[0,:,:,:] = xs.squeeze()
         for i in range(self.num_time-1):
-            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef).squeeze() * self.dt + self.dB[i,:,:,:]
+            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef, self.dim).squeeze() * self.dt + self.dB[i,:,:,:]
         p0mux = initial(x)
         u_em = p0mux.mean(1)
         # calculate values using girsanov
-        muBx = drift(Bx, coef)
+        muBx = drift(Bx, coef, self.dim)
         expmart = torch.exp((torch.cumsum(muBx*self.dB,dim=0) - 0.5 * torch.cumsum((muBx ** 2) * self.dt,dim=0)).sum(-1))
         u_gir = (p0Bx*expmart).mean(1)
         # calculate values using deeponet
@@ -166,17 +165,17 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fk/ngo/figure/don_train_girloss_full.png')
+        plt.savefig('/scratch/xx84/girsanov/fk/high_dim/figure/don_train_girloss_full_'+str(self.dim)+'.png')
         plt.clf()
         plt.plot(ep, self.metrics.mean(-1), label='DeepONet')
         plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fk/ngo/figure/don_train_girloss_don.png')
+        plt.savefig('/scratch/xx84/girsanov/fk/high_dim/figure/don_train_girloss_don_'+str(self.dim)+'.png')
         plt.clf()
-        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fk/ngo/trained_model/branch_5d.pt')
-        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fk/ngo/trained_model/trunk_5d.pt')
+        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fk/high_dim/trained_model/branch_'+str(self.dim)+'.pt')
+        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fk/high_dim/trained_model/trunk_'+str(self.dim)+'.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -200,7 +199,7 @@ if __name__ == '__main__':
     X = 0.5
     T = 0.1
     num_time = 40
-    dim = 10
+    dim = 20
     num_samples = 12000
     batch_size = 40
     N = 4000
