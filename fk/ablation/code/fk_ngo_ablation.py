@@ -195,14 +195,14 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fk/high_dim/figure/ngo_train_girloss_full_'+str(self.dim)+'.png')
+        plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/ngo_train_girloss_full_'+str(self.dim)+'.png')
         plt.clf()
         plt.plot(ep, self.cnn_metrics.mean(-1), label='CNN')
         plt.fill_between(ep, self.cnn_metrics.mean(-1) - self.cnn_metrics.std(-1), self.cnn_metrics.mean(-1) + self.cnn_metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fk/high_dim/figure/ngo_train_girloss_ngo_'+str(self.dim)+'.png')
+        plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/ngo_train_girloss_ngo_'+str(self.dim)+'.png')
         plt.clf()
         plt.plot(ep, self.em_comp_time.mean(-1), label='EM')
         plt.fill_between(ep, self.em_comp_time.mean(-1) - self.em_comp_time.std(-1), self.em_comp_time.mean(-1) + self.em_comp_time.std(-1), alpha=0.2)
@@ -213,9 +213,9 @@ class FKModule(pl.LightningModule):
         plt.ylabel('Computation Time')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fk/high_dim/figure/ngo_train_comptime_'+str(self.dim)+'.png')
+        plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/ngo_train_comptime_'+str(self.dim)+'.png')
         plt.clf()
-        torch.save(self.expmart_cnn.state_dict(), '/scratch/xx84/girsanov/fk/high_dim/trained_model/ngo_'+str(self.dim)+'.pt')
+        torch.save(self.expmart_cnn.state_dict(), '/scratch/xx84/girsanov/fk/ablation/trained_model/ngo_'+str(self.dim)+'.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -232,37 +232,37 @@ if __name__ == '__main__':
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
-    
-    x0 = 0.1
-    X = 0.5
-    T = 0.1
-    num_time = 40
-    dim = 1
-    num_samples = 12000
-    batch_size = 10
-    N = 4000
-    xs = torch.rand(num_samples,dim) * X + x0
-    ts = torch.rand(num_samples,1) * T
-    dataset = torch.cat((xs,ts),dim=1)
-    data_train = dataset[:num_samples// 2,:]
-    data_val = dataset[num_samples //2 :,:]
-    
-    train_kwargs = {'batch_size': batch_size,
-            'shuffle': True,
-            'num_workers': 1}
+    for dim in range(2,20):
+        x0 = 0.1
+        X = 0.5
+        T = 0.1
+        num_time = 40
+        
+        num_samples = 12000
+        batch_size = 10
+        N = 4000
+        xs = torch.rand(num_samples,dim) * X + x0
+        ts = torch.rand(num_samples,1) * T
+        dataset = torch.cat((xs,ts),dim=1)
+        data_train = dataset[:num_samples// 2,:]
+        data_val = dataset[num_samples //2 :,:]
+        
+        train_kwargs = {'batch_size': batch_size,
+                'shuffle': True,
+                'num_workers': 1}
 
-    test_kwargs = {'batch_size': batch_size,
-            'shuffle': False,
-            'num_workers': 1}
+        test_kwargs = {'batch_size': batch_size,
+                'shuffle': False,
+                'num_workers': 1}
 
-    n_batch_val = int(num_samples // 2 / batch_size)
+        n_batch_val = int(num_samples // 2 / batch_size)
 
-    train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
-    val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
+        train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
+        val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
-    model = FKModule(X=X, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
-    trainer = pl.Trainer(max_epochs=50, gpus=1, check_val_every_n_epoch=1)
-    trainer.fit(model, train_loader, val_loader)
-    
-    print(trainer.logged_metrics['val_loss'])
-    print(trainer.logged_metrics['train_loss'])
+        model = FKModule(X=X, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
+        trainer = pl.Trainer(max_epochs=10, gpus=1, check_val_every_n_epoch=1)
+        trainer.fit(model, train_loader, val_loader)
+        
+        print(trainer.logged_metrics['val_loss'])
+        print(trainer.logged_metrics['train_loss'])

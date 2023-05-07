@@ -275,39 +275,39 @@ if __name__ == '__main__':
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
     
-    x0 = 0.1
-    X = 0.5
-    T = 0.1
-    t0 = 0.
-    num_time = 40
-    dim = 14
-    num_samples = 12000
-    batch_size = 60
-    N = 4000
-    m=100
-    p=15
-    xs = torch.rand(num_samples,dim) * X + x0
-    ts = torch.rand(num_samples,1) * T
-    dataset = torch.cat((xs,ts),dim=1)
-    data_train = dataset[:num_samples// 2,:]
-    data_val = dataset[num_samples //2 :,:]
-    
-    train_kwargs = {'batch_size': batch_size,
-            'shuffle': True,
-            'num_workers': 1}
+    for dim in range(1,20):
+        x0 = 0.1
+        X = 0.5
+        T = 0.1
+        t0 = 0.
+        num_time = 40
+        num_samples = 12000
+        batch_size = 60
+        N = 4000
+        m=100
+        p=15
+        xs = torch.rand(num_samples,dim) * X + x0
+        ts = torch.rand(num_samples,1) * T
+        dataset = torch.cat((xs,ts),dim=1)
+        data_train = dataset[:num_samples// 2,:]
+        data_val = dataset[num_samples //2 :,:]
+        
+        train_kwargs = {'batch_size': batch_size,
+                'shuffle': True,
+                'num_workers': 1}
 
-    test_kwargs = {'batch_size': batch_size,
-            'shuffle': False,
-            'num_workers': 1}
+        test_kwargs = {'batch_size': batch_size,
+                'shuffle': False,
+                'num_workers': 1}
 
-    n_batch_val = int(num_samples // 2 / batch_size)
+        n_batch_val = int(num_samples // 2 / batch_size)
 
-    train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
-    val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
+        train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
+        val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
-    model = FKModule(m=m, p=p, X=X, t0=t0, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
-    trainer = pl.Trainer(max_epochs=20, gpus=1, check_val_every_n_epoch=1)
-    trainer.fit(model, train_loader, val_loader)
-    
-    print(trainer.logged_metrics['val_loss'])
-    print(trainer.logged_metrics['train_loss'])
+        model = FKModule(m=m, p=p, X=X, t0=t0, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
+        trainer = pl.Trainer(max_epochs=10, gpus=1, check_val_every_n_epoch=1)
+        trainer.fit(model, train_loader, val_loader)
+        
+        print(trainer.logged_metrics['val_loss'])
+        print(trainer.logged_metrics['train_loss'])

@@ -100,7 +100,7 @@ class FKModule(pl.LightningModule):
         self.B0 = torch.Tensor(self.B0.cumsum(0)).to(device)
         self.dB = torch.Tensor(self.dB).to(device)
         
-        self.metrics = torch.zeros((50,n_batch_val))
+        self.don_metrics = torch.zeros((50,n_batch_val))
         self.gir_metrics = torch.zeros((50,n_batch_val))
         self.epochs = torch.linspace(0,49,50)
         
@@ -150,32 +150,32 @@ class FKModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         xt = batch.to(device)
         u_em, u_gir, u_don = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
-        loss = torch.norm((u_don-u_em))/torch.norm(u_em)
-        loss_g = torch.norm((u_gir-u_em))/torch.norm(u_em)
-        print('Validation: {:.4f}, {:.4f}'.format(loss, loss_g))
-        self.log('val_loss', loss)
-        if not loss.isnan():
-            self.metrics[self.current_epoch, batch_idx] = loss.item()
-            self.gir_metrics[self.current_epoch, batch_idx] = loss_g.item()
-        ep = torch.arange(self.metrics.shape[0])
-        plt.plot(ep, self.metrics.mean(-1), label='DeepONet')
-        plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
+        loss_don = torch.norm((u_don-u_em))/torch.norm(u_em)
+        loss_gir = torch.norm((u_gir-u_em))/torch.norm(u_em)
+        print('Validation: {:.4f}, {:.4f}'.format(loss_don, loss_gir))
+        self.log('val_loss', loss_don)
+        if not loss_don.isnan():
+            self.don_metrics[self.current_epoch, batch_idx] = loss_don.item()
+            self.gir_metrics[self.current_epoch, batch_idx] = loss_gir.item()
+        ep = torch.arange(self.don_metrics.shape[0])
+        plt.plot(ep, self.don_metrics.mean(-1), label='DeepONet')
+        plt.fill_between(ep, self.don_metrics.mean(-1) - self.don_metrics.std(-1), self.don_metrics.mean(-1) + self.don_metrics.std(-1), alpha=0.2)
         plt.plot(ep, self.gir_metrics.mean(-1), label='Direct Girsanov')
         plt.fill_between(ep, self.gir_metrics.mean(-1) - self.gir_metrics.std(-1), self.gir_metrics.mean(-1) + self.gir_metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fk/high_dim/figure/don_train_girloss_full_'+str(self.dim)+'.png')
+        plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/don_train_girloss_full_'+str(self.dim)+'.png')
         plt.clf()
-        plt.plot(ep, self.metrics.mean(-1), label='DeepONet')
-        plt.fill_between(ep, self.metrics.mean(-1) - self.metrics.std(-1), self.metrics.mean(-1) + self.metrics.std(-1), alpha=0.2)
+        plt.plot(ep, self.don_metrics.mean(-1), label='DeepONet')
+        plt.fill_between(ep, self.don_metrics.mean(-1) - self.don_metrics.std(-1), self.don_metrics.mean(-1) + self.don_metrics.std(-1), alpha=0.2)
         plt.ylabel('Relative Error')
         plt.xlabel('Epochs')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/fk/high_dim/figure/don_train_girloss_don_'+str(self.dim)+'.png')
+        plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/don_train_girloss_don_'+str(self.dim)+'.png')
         plt.clf()
-        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fk/high_dim/trained_model/branch_'+str(self.dim)+'.pt')
-        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fk/high_dim/trained_model/trunk_'+str(self.dim)+'.pt')
+        torch.save(self.branch.state_dict(), '/scratch/xx84/girsanov/fk/ablation/trained_model/branch_'+str(self.dim)+'.pt')
+        torch.save(self.trunk.state_dict(), '/scratch/xx84/girsanov/fk/ablation/trained_model/trunk_'+str(self.dim)+'.pt')
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -193,38 +193,39 @@ if __name__ == '__main__':
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
     
-    m=100
-    p=15
-    x0 = 0.1
-    X = 0.5
-    T = 0.1
-    num_time = 40
-    dim = 20
-    num_samples = 12000
-    batch_size = 40
-    N = 4000
-    xs = torch.rand(num_samples,dim) * X + x0
-    ts = torch.rand(num_samples,1) * T
-    dataset = torch.cat((xs,ts),dim=1)
-    data_train = dataset[:num_samples// 2,:]
-    data_val = dataset[num_samples //2 :,:]
+    for dim in range(2,20):
     
-    train_kwargs = {'batch_size': batch_size,
-            'shuffle': True,
-            'num_workers': 1}
+        m=100
+        p=15
+        x0 = 0.1
+        X = 0.5
+        T = 0.1
+        num_time = 40
+        num_samples = 12000
+        batch_size = 40
+        N = 4000
+        xs = torch.rand(num_samples,dim) * X + x0
+        ts = torch.rand(num_samples,1) * T
+        dataset = torch.cat((xs,ts),dim=1)
+        data_train = dataset[:num_samples// 2,:]
+        data_val = dataset[num_samples //2 :,:]
+        
+        train_kwargs = {'batch_size': batch_size,
+                'shuffle': True,
+                'num_workers': 1}
 
-    test_kwargs = {'batch_size': batch_size,
-            'shuffle': False,
-            'num_workers': 1}
+        test_kwargs = {'batch_size': batch_size,
+                'shuffle': False,
+                'num_workers': 1}
 
-    n_batch_val = int(num_samples // 2 / batch_size)
+        n_batch_val = int(num_samples // 2 / batch_size)
 
-    train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
-    val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
+        train_loader = torch.utils.data.DataLoader(data_train,**train_kwargs)
+        val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
-    model = FKModule(m=m, dim=dim, p=p, batch_size = batch_size, lr=1e-3, X=X, T=T, N=N, num_time=num_time, n_batch_val=n_batch_val)
-    trainer = pl.Trainer(max_epochs=50, gpus=1, check_val_every_n_epoch=1)
-    trainer.fit(model, train_loader, val_loader)
-    
-    print(trainer.logged_metrics['val_loss'])
-    print(trainer.logged_metrics['train_loss'])
+        model = FKModule(m=m, dim=dim, p=p, batch_size = batch_size, lr=1e-3, X=X, T=T, N=N, num_time=num_time, n_batch_val=n_batch_val)
+        trainer = pl.Trainer(max_epochs=10, gpus=1, check_val_every_n_epoch=1)
+        trainer.fit(model, train_loader, val_loader)
+        
+        print(trainer.logged_metrics['val_loss'])
+        print(trainer.logged_metrics['train_loss'])
