@@ -24,12 +24,12 @@ import pandas as pd
 from torchqrnn import QRNN
 import time
 
-
-def b(t,x, coef):
+def b(t,x, coef, dim):
     x = x.unsqueeze(-1)
-    x0 = x ** 0
-    x1 = x ** 1
-    x2 = x ** 2
+    #x = x/dim
+    x0 = (x ** 0)/dim
+    x1 = (torch.sin(x))/dim
+    x2 = torch.cos(x)/dim
     vals = torch.cat((x0,x1,x2),axis=-1)
     return (coef * vals).sum(-1)
 
@@ -131,7 +131,7 @@ class FKModule(pl.LightningModule):
         xi = torch.cumsum(self.dB * sigmas.unsqueeze(0).unsqueeze(0),dim=0) + xs.unsqueeze(0).unsqueeze(0).repeat(self.num_time,N,1,1)
         xi.requires_grad = True
         sigmas = sigma(self.t.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1), xi)
-        mu = b(self.t, xi, coef)/sigmas
+        mu = b(self.t, xi, coef, self.dim)/sigmas
         start = time.time()
         mart = torch.cumsum(mu * self.dB, dim=-1) - 0.5 * torch.cumsum(mu ** 2, dim=-1) * self.dt
         expmart = torch.exp(mart.sum(-1))
@@ -174,7 +174,7 @@ class FKModule(pl.LightningModule):
             xi = xi.unsqueeze(0)
             xi.requires_grad = True
             for i in range(0,self.num_time-1):
-                x_current = xi[i,:,:,:] + b(self.t[i], xi[i,:,:,:], coef) * self.dt + sigma(self.t[i], xi[i,:,:,:]).to(device) * self.dB[i,:,:,:]
+                x_current = xi[i,:,:,:] + b(self.t[i], xi[i,:,:,:], coef, self.dim) * self.dt + sigma(self.t[i], xi[i,:,:,:]).to(device) * self.dB[i,:,:,:]
                 xi = torch.cat((xi, x_current.unsqueeze(0)),dim=0)
             
             xT = xi[-1,:,:,:]
