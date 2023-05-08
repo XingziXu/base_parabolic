@@ -339,7 +339,7 @@ if __name__ == '__main__':
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
     
-    for dim in range(1,20):
+    for dim in range(11,20):
         x0 = 0.1
         X = 0.5
         T = 0.1
