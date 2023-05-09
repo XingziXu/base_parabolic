@@ -176,14 +176,12 @@ with open('/scratch/xx84/girsanov/fbsde/ablation/result/dim_bs_em_time_var.npy',
 
 ep = torch.arange(len(gir_mean))+1
 
-plt.plot(ep, np.array(gir_mean_t)*1e3, label='Girsanov', color='palevioletred')
-plt.fill_between(ep, np.array(gir_mean_t-gir_var_t)*1e3, np.array(gir_mean_t+gir_var_t)*1e3, alpha=0.2, color='lightpink')
 plt.plot(ep, np.array(cnn_mean_t)*1e3, label='NGO', color='darkcyan')
 plt.fill_between(ep, np.array(cnn_mean_t-cnn_var_t)*1e3, np.array(cnn_mean_t+cnn_var_t)*1e3, alpha=0.2, color='mediumturquoise')
 plt.plot(ep, np.array(don_mean_t)*1e3, label='DeepONet',color='darkslateblue')
 plt.fill_between(ep, np.array(don_mean_t-don_var_t)*1e3, np.array(don_mean_t+don_var_t)*1e3, alpha=0.2,color='slateblue')
-plt.plot(ep, np.array(em_mean_t)*1e3, label='Euler-Maruyama',color='darkorange')
-plt.fill_between(ep, np.array(em_mean_t-em_var_t)*1e3, np.array(em_mean_t+em_var_t)*1e3, alpha=0.2,color='bisque')
+plt.plot(ep, np.array(em_mean_t)*1e3, label='Girsanov',color='palevioletred')
+plt.fill_between(ep, np.array(em_mean_t-em_var_t)*1e3, np.array(em_mean_t+em_var_t)*1e3, alpha=0.2,color='lightpink')
 #plt.ylim(0, 0.02*1e3)
 plt.ylabel('Computation Time')
 plt.xlabel('Dimension')
@@ -277,14 +275,12 @@ with open('/scratch/xx84/girsanov/fbsde/ablation/result/dim_hjb_em_time_var.npy'
 
 ep = torch.arange(len(gir_mean))+1
 
-plt.plot(ep, np.array(gir_mean_t)*1e3, label='Girsanov', color='palevioletred')
-plt.fill_between(ep, np.array(gir_mean_t-gir_var_t)*1e3, np.array(gir_mean_t+gir_var_t)*1e3, alpha=0.2, color='lightpink')
 plt.plot(ep, np.array(cnn_mean_t)*1e3, label='NGO', color='darkcyan')
 plt.fill_between(ep, np.array(cnn_mean_t-cnn_var_t)*1e3, np.array(cnn_mean_t+cnn_var_t)*1e3, alpha=0.2, color='mediumturquoise')
 plt.plot(ep, np.array(don_mean_t)*1e3, label='DeepONet',color='darkslateblue')
 plt.fill_between(ep, np.array(don_mean_t-don_var_t)*1e3, np.array(don_mean_t+don_var_t)*1e3, alpha=0.2,color='slateblue')
-plt.plot(ep, np.array(em_mean_t)*1e3, label='Euler-Maruyama',color='darkorange')
-plt.fill_between(ep, np.array(em_mean_t-em_var_t)*1e3, np.array(em_mean_t+em_var_t)*1e3, alpha=0.2,color='bisque')
+plt.plot(ep, np.array(em_mean_t)*1e3, label='Girsanov',color='palevioletred')
+plt.fill_between(ep, np.array(em_mean_t-em_var_t)*1e3, np.array(em_mean_t+em_var_t)*1e3, alpha=0.2,color='lightpink')
 #plt.ylim(0, 0.02*1e3)
 plt.ylabel('Computation Time')
 plt.xlabel('Dimension')
@@ -298,7 +294,7 @@ plt.fill_between(ep, np.array(cnn_mean-cnn_var), np.array(cnn_mean+cnn_var), alp
 plt.plot(ep, np.array(gir_mean), label='Girsanov', color='palevioletred')
 plt.fill_between(ep, np.array(gir_mean-gir_var), np.array(gir_mean+gir_var), alpha=0.2, color='lightpink')
 #plt.ylim(0, np.array(don_max).max()+0.2)
-plt.ylim(0., 1.)
+#plt.ylim(0., .1)
 plt.plot(ep, np.array(don_mean), label='DeepONet',color='darkslateblue')
 plt.fill_between(ep, np.array(don_mean-don_var), np.array(don_mean+don_var), alpha=0.2,color='slateblue')
 plt.ylabel('Normalized Error')
