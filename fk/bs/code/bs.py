@@ -190,16 +190,14 @@ class FKModule(pl.LightningModule):
         time_em = (end - start)
         
         # calculate values using gbm solution
-        start = time.time()
         x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
         x[0,:,:,:] = xs
         for i in range(self.num_time-1):
             t_current = self.t[i]
-            x[i+1,:,:,:] = xs * torch.exp((self.r-0.5*self.sigma**2)*(self.T-t_current)+self.sigma*(self.B0_gir[-1,:,:,:]-self.B0_gir[i,:,:,:]))
+            x[i+1,:,:,:] = xs * torch.exp((-self.r-0.5*self.sigma**2)*(self.T-t_current)+self.sigma*(self.B0_gir[-1,:,:,:]-self.B0_gir[i,:,:,:]))
         p0mux = terminal(dim, x, self.k).squeeze()
         u_gt = (p0mux * r_value(self.dim, self.t).unsqueeze(-1).unsqueeze(-1)).mean(1)
         end = time.time()
-        time_em = (end - start)
         
         # calculate values using girsanov
         #Bx_gir = (xs.unsqueeze(0).unsqueeze(0)+self.B0_gir)
@@ -213,7 +211,7 @@ class FKModule(pl.LightningModule):
         # calculate values using CNN
         Bx_cnn = (xs.unsqueeze(0).unsqueeze(0)+self.B0_cnn)
         p0Bx_cnn = terminal(dim, Bx_cnn, self.k).squeeze()
-        muBx_cnn = drift(Bx_cnn, coef, self.r)/diffusion(Bx_cnn, self.t, self.sigma)
+        muBx_cnn = drift(Bx_cnn, coef, -self.r)/diffusion(Bx_cnn, self.t, self.sigma)
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
         input[:muBx_cnn.shape[0],:,:,:] = torch.cat((muBx_cnn,self.dB_cnn,self.dt*torch.ones(self.dB_cnn.shape[0],self.dB_cnn.shape[1],self.dB_cnn.shape[2],1).to(device)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
@@ -299,10 +297,12 @@ class FKModule(pl.LightningModule):
             self.log('cnn_loss_mean', self.cnn_metrics[np.where(self.cnn_metrics!=0)].mean())
             self.log('cnn_loss_max', self.cnn_metrics[np.where(self.cnn_metrics!=0)].max())
             self.log('cnn_loss_var', torch.var(self.cnn_metrics[np.where(self.cnn_metrics!=0)]))
+            
             self.log('don_loss_min', self.don_metrics[np.where(self.don_metrics!=0)].min())
             self.log('don_loss_mean', self.don_metrics[np.where(self.don_metrics!=0)].mean())
             self.log('don_loss_max', self.don_metrics[np.where(self.don_metrics!=0)].max())
             self.log('don_loss_var', torch.var(self.don_metrics[np.where(self.don_metrics!=0)]))
+            
             self.log('em_loss_min', self.em_metrics[np.where(self.em_metrics!=0)].min())
             self.log('em_loss_mean', self.em_metrics[np.where(self.em_metrics!=0)].mean())
             self.log('em_loss_max', self.em_metrics[np.where(self.em_metrics!=0)].max())
@@ -374,14 +374,14 @@ if __name__ == '__main__':
     em_time_max = []
     em_time_var = []
     
-    for i in range(2,18):
+    for i in range(2,30):
         dim = 10
         X = 0.5
         T = i * 0.025
         num_time = i
         num_samples = 420
         batch_size = 5
-        N = 1000
+        N = 4000
         xs = torch.rand(num_samples,dim) * X
         ts = torch.rand(num_samples,1) * T
         dataset = torch.cat((xs,ts),dim=1)

@@ -85,7 +85,7 @@ plt.fill_between(ep, np.array(em_mean_t-em_var_t)*1e3, np.array(em_mean_t+em_var
 plt.ylabel('Computation Time')
 plt.xlabel('Dimension')
 plt.legend()
-plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/dim_time_cnn.pdf')
+plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/dim_time_cnn.png')
 plt.clf()
 
 plt.plot(ep, np.array(cnn_mean), label='NGO', color='darkcyan')
@@ -99,7 +99,7 @@ plt.fill_between(ep, np.array(don_mean-don_var), np.array(don_mean+don_var), alp
 plt.ylabel('Normalized Error')
 plt.xlabel('Dimension')
 plt.legend()
-plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/dim_loss_cnn.pdf')
+plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/dim_loss_cnn.png')
 plt.clf()
 
 #############################################################################################
@@ -184,7 +184,7 @@ plt.fill_between(ep, np.array(em_mean_t-em_var_t)*1e3, np.array(em_mean_t+em_var
 plt.ylabel('Computation Time')
 plt.xlabel('Dimension')
 plt.legend()
-plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/dim_ou_time_cnn.pdf')
+plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/dim_ou_time_cnn.png')
 plt.clf()
 
 plt.plot(ep, np.array(cnn_mean), label='NGO', color='darkcyan')
@@ -198,5 +198,5 @@ plt.fill_between(ep, np.array(don_mean-don_var), np.array(don_mean+don_var), alp
 plt.ylabel('Normalized Error')
 plt.xlabel('Dimension')
 plt.legend()
-plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/dim_ou_loss_cnn.pdf')
+plt.savefig('/scratch/xx84/girsanov/fk/ablation/figure/dim_ou_loss_cnn.png')
 plt.clf()
