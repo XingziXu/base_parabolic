@@ -370,7 +370,7 @@ if __name__ == '__main__':
     em_time_max = []
     em_time_var = []
     
-    for dim in range(1,12):
+    for dim in range(1,15):
         i = 10
         m=100
         p=15
