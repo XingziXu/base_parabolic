@@ -24,19 +24,23 @@ import pandas as pd
 import time
 
 def drift(x, coef, r):
-    return x * r
+    return -r*x
 
-def diffusion(x, sigma):
-    return x * sigma
+def diffusion(x,t,sigma):
+    return sigma * x
 
-def terminal(x, K):
-    pxt = (x-K)
-    pxt[pxt < 0] = 0
+def terminal(dim, x, k):
+    pxt = torch.max(x-k, dim=-1)[0]
+    pxt[pxt<0] = 0
     return pxt
 
-def r_value(dim, t, r):
-    return torch.exp(- r * t).to(device)
+def r_value(dim, t):
+    return torch.exp(- dim * t).to(device)
 
+def ou_pdf(dim, x, t):
+    t = t.to(device)
+    pxt = torch.exp((x**2).sum(-1)/(1-3*torch.exp(2*t))) * (np.pi*(3*torch.exp(2*t)-1))**(-dim/2)
+    return pxt
 
 class CNN_expmart(nn.Module):
     def __init__(self, input_size, hidden_size, num_outputs):
@@ -97,10 +101,9 @@ class MLP(nn.Module):
 class FKModule(pl.LightningModule):
     def __init__(self, N = 2000, lr = 1e-3, X = 1., T = 0.1, dim = 2, batch_size = 100, num_time = 100, n_batch_val=100):
         super().__init__()
-        # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
         self.r = 0.1
-        self.sigma = 0.1
-        self.k = 1
+        self.sigma = 0.5
+        self.k = 0.1
         self.num_time = num_time
         self.T = T
         self.t0 = 0.
@@ -110,7 +113,7 @@ class FKModule(pl.LightningModule):
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = self.dim * 2 + 1
         # hidden_size is dimension of the RNN output
-        hidden_size = 80
+        input_size = self.dim * 2 + 1
         # num_layers is the number of RNN blocks
         num_layers = 3
         # num_outputs is the number of ln(rho(x,t))
@@ -120,6 +123,8 @@ class FKModule(pl.LightningModule):
 
         # define the learning rate
         self.lr = lr
+        
+        self.X = X
         
         # define number of paths used and grid of PDE
         self.N = N
@@ -144,12 +149,6 @@ class FKModule(pl.LightningModule):
         self.B0_cnn = torch.Tensor(self.B0_cnn.cumsum(0)).to(device)
         self.dB_cnn = torch.Tensor(self.dB_cnn).to(device)
         
-        self.dB_gt = np.sqrt(self.dt.item()) * np.random.randn(self.t.shape[0], self.N, self.batch_size, self.dim)
-        self.dB_gt[0,:,:,:] = 0 
-        self.B0_gt = self.dB_gt.copy()
-        self.B0_gt = torch.Tensor(self.B0_gt.cumsum(0)).to(device)
-        self.dB_gt = torch.Tensor(self.dB_gt).to(device)
-        
         self.cnn_metrics = torch.zeros((50,n_batch_val))
         self.gir_metrics = torch.zeros((50,n_batch_val))
         self.em_metrics = torch.zeros((50,n_batch_val))
@@ -170,7 +169,7 @@ class FKModule(pl.LightningModule):
         self.p = 15 # number of "branches"
         self.lr = 1e-30 # learning rate
         self.X = X # interval size
-        self.sensors = terminal((torch.linspace(0., 1., self.m).unsqueeze(-1).repeat(1,self.dim) * self.X).to(device), self.k)
+        self.sensors = terminal(self.dim, (torch.linspace(0., 1., self.m).unsqueeze(-1).repeat(1,self.dim) * self.X).to(device), self.k)
         self.branch = MLP(input_dim=self.m, hidden_dim=70+5*dim, output_dim=self.p) # branch network
         self.trunk = MLP(input_dim=dim+1, hidden_dim=50+5*dim, output_dim=self.p) # trunk network
 
@@ -180,39 +179,51 @@ class FKModule(pl.LightningModule):
         coef = coef
         
         # calculate values using euler-maruyama
-        u_em = torch.zeros()
+        start = time.time()
+        x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
+        x[0,:,:,:] = xs
+        for i in range(self.num_time-1):
+            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef, self.r) * self.dt + self.dB_em[i,:,:,:] * diffusion(x[i,:,:,:], self.t[i], self.sigma)
+        p0mux = terminal(dim, x, self.k).squeeze()
+        u_em = (p0mux * r_value(self.dim, self.t).unsqueeze(-1).unsqueeze(-1)).mean(1)
+        end = time.time()
+        time_em = (end - start)
+        
+        # calculate values using gbm solution
         start = time.time()
         x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
         x[0,:,:,:] = xs
         for i in range(self.num_time-1):
             t_current = self.t[i]
-            sT = xs * torch.exp((self.r-0.5*self.sigma**2)*(self.T-t_current)+self.sigma(self.B0_em[-1,:,:,:]-self.B0_em[i,:,:,:]))
-            p0mux = terminal(x, self.k).squeeze()
-            u_em = (p0mux * r_value(self.dim, self.T-t_current, self.r).unsqueeze(-1).unsqueeze(-1)).mean(1)
+            x[i+1,:,:,:] = xs * torch.exp((self.r-0.5*self.sigma**2)*(self.T-t_current)+self.sigma*(self.B0_gir[-1,:,:,:]-self.B0_gir[i,:,:,:]))
+        p0mux = terminal(dim, x, self.k).squeeze()
+        u_gt = (p0mux * r_value(self.dim, self.t).unsqueeze(-1).unsqueeze(-1)).mean(1)
         end = time.time()
         time_em = (end - start)
-
+        
+        # calculate values using girsanov
+        #Bx_gir = (xs.unsqueeze(0).unsqueeze(0)+self.B0_gir)
+        #p0Bx_gir = terminal(dim, Bx_gir, self.k).squeeze()
+        #start = time.time()
+        #muBx_gir = drift(Bx_gir, coef, self.r)
+        #expmart = torch.exp((torch.cumsum(muBx_gir*self.dB_gir,dim=0) - 0.5 * torch.cumsum((muBx_gir ** 2) * self.dt,dim=0)).sum(-1))
+        #u_gir = (p0Bx_gir * expmart * r_value(self.dim, self.t).unsqueeze(-1).unsqueeze(-1)).mean(1)
+        #end = time.time()
+        #time_gir = (end - start)
         # calculate values using CNN
-        Bx_cnn = (xs.unsqueeze(0).unsqueeze(0)+self.B0_cnn * self.sigma)
-        p0Bx_cnn = terminal(Bx_cnn, self.k).squeeze()
-        muBx_cnn = drift(Bx_cnn, coef, self.r)
+        Bx_cnn = (xs.unsqueeze(0).unsqueeze(0)+self.B0_cnn)
+        p0Bx_cnn = terminal(dim, Bx_cnn, self.k).squeeze()
+        muBx_cnn = drift(Bx_cnn, coef, self.r)/diffusion(Bx_cnn, self.t, self.sigma)
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
         input[:muBx_cnn.shape[0],:,:,:] = torch.cat((muBx_cnn,self.dB_cnn,self.dt*torch.ones(self.dB_cnn.shape[0],self.dB_cnn.shape[1],self.dB_cnn.shape[2],1).to(device)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
+        r_vals = r_value(self.dim, self.t).unsqueeze(-1).unsqueeze(-1)
         start = time.time()
         cnn_expmart = self.relu(self.expmart_cnn(input_reshaped).sum(-2)).reshape(p0Bx_cnn.shape)
-        u_cnn = (p0Bx_cnn * cnn_expmart * r_value(self.dim, self.t, self.r).unsqueeze(-1).unsqueeze(-1)).mean(1)
+        u_cnn = (p0Bx_cnn * cnn_expmart * r_vals).mean(1)
         end = time.time()
         time_cnn = (end - start)
         
-        # calculate ground truth values
-        u_gt = torch.zeros_like(u_cnn)
-        for i in range(0,self.num_time):
-            t_current = self.t[i]
-            changed_xs = torch.log(xs)-(self.r-0.5*self.sigma**2)*(self.T-t_current)
-            Bx_gt = (changed_xs.unsqueeze(0)+self.B0_gt[i,:,:,:] * self.sigma)
-            p0gtx = terminal(Bx_gt, self.k).squeeze()
-            u_gt[i,:] = torch.exp(-self.r * t_current) * (p0gtx).mean(0)
         # calculate values using deeponet
         axis = torch.Tensor([]).to(device)
         for i in range(self.num_time):
@@ -222,10 +233,10 @@ class FKModule(pl.LightningModule):
         branchs = self.branch(self.sensors.unsqueeze(0)).repeat(self.batch_size*(self.num_time), 1)
         u_don = torch.zeros_like(u_em)
         trunks = self.trunk(axis)
-        u_don = (branchs * trunks).sum(1).reshape(u_gir.shape)
+        u_don = (branchs * trunks).sum(1).reshape(u_cnn.shape)
         end = time.time()
         time_don = (end - start)
-        return u_em, u_gir, u_cnn, u_don, time_em, time_gir, time_cnn, time_don, u_gt
+        return u_em, u_cnn, u_don, u_gt, time_em, time_cnn, time_don
 
     def training_step(self, batch, batch_idx):
         # REQUIRED
@@ -233,7 +244,7 @@ class FKModule(pl.LightningModule):
         #xs = torch.linspace(-0.1, 0.1, batch_size)
         #t = torch.zeros_like(xs)
         #xt = torch.cat((xs.unsqueeze(-1),t.unsqueeze(-1)),dim=-1).to(device)
-        u_em, u_gir, u_cnn, u_don, time_em, time_gir, time_cnn, time_don, u_gt = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
+        u_em, u_cnn, u_don, u_gt, time_em, time_cnn, time_don = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
         #plt.subplot(3,2,1)
         #plt.imshow(u_gt.cpu().detach().numpy())
         #plt.colorbar()
@@ -253,7 +264,7 @@ class FKModule(pl.LightningModule):
         #plt.imshow((u_gir-u_gt).cpu().detach().numpy())
         #plt.colorbar()
         #plt.savefig('/scratch/xx84/girsanov/pde_rnn/ou_ground_truth.png')
-        loss = F.l1_loss(u_cnn, u_gir)#/(torch.abs(u_gir).mean())
+        loss = F.l1_loss(u_cnn, u_em)#/(torch.abs(u_gir).mean())
         #tensorboard_logs = {'train_loss': loss_prior}
         self.log('train_loss', loss)
         #print(loss_total)
@@ -261,33 +272,29 @@ class FKModule(pl.LightningModule):
         
         
     def validation_step(self, batch, batch_idx):
-        #xs = torch.linspace(-0.1, 0.1, batch_size)
-        #t = torch.zeros_like(xs)
-        #xt = torch.cat((xs.unsqueeze(-1),t.unsqueeze(-1)),dim=-1).to(device)
-        xt = batch.to(device)
         self.expmart_cnn.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/ablation/trained_model/ngo_'+str(self.dim)+'.pt'))
         self.branch.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/ablation/trained_model/branch_'+str(self.dim)+'.pt'))
         self.trunk.load_state_dict(torch.load('/scratch/xx84/girsanov/fk/ablation/trained_model/trunk_'+str(self.dim)+'.pt'))
-        u_em, u_gir, u_cnn, u_don, time_em, time_gir, time_cnn, time_don, u_gt = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
-        loss_cnn = F.mse_loss(u_cnn,u_em,reduction='mean')/(torch.abs(u_em).mean())
-        loss_gir = F.mse_loss(u_gir,u_em,reduction='mean')/(torch.abs(u_em).mean())
+        xt = batch.to(device)
+        u_em, u_cnn, u_don, u_gt, time_em, time_cnn, time_don = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
+        loss_cnn = F.mse_loss(u_cnn,u_gt,reduction='mean')/(torch.abs(u_gt).mean())
+        loss_don = F.mse_loss(u_don,u_gt,reduction='mean')/(torch.abs(u_gt).mean())
         loss_em = F.mse_loss(u_em,u_gt,reduction='mean')/(torch.abs(u_gt).mean())
-        loss_don = F.mse_loss(u_don,u_em,reduction='mean')/(torch.abs(u_em).mean())
-        #print('Validation: {:.4f}, {:.4f}'.format(loss, loss_g))
-        #self.log('val_loss', loss)
+        print('Validation: {:.4f}, {:.4f}'.format(loss_cnn, loss_don))
+        self.log('val_loss', loss_cnn)
         if not loss_cnn.isnan():
             self.cnn_metrics[self.current_epoch, batch_idx] = loss_cnn.item()
-            self.gir_metrics[self.current_epoch, batch_idx] = loss_gir.item()
-            self.em_metrics[self.current_epoch, batch_idx] = loss_em.item()
+            #self.gir_metrics[self.current_epoch, batch_idx] = loss_gir.item()
             self.don_metrics[self.current_epoch, batch_idx] = loss_don.item()
+            self.em_metrics[self.current_epoch, batch_idx] = loss_em.item()
             self.em_comp_time[self.current_epoch, batch_idx] = time_em
-            self.gir_comp_time[self.current_epoch, batch_idx] = time_gir
+            #self.gir_comp_time[self.current_epoch, batch_idx] = time_gir
             self.cnn_comp_time[self.current_epoch, batch_idx] = time_cnn
             self.don_comp_time[self.current_epoch, batch_idx] = time_don
-            self.log('gir_loss_min', self.gir_metrics[np.where(self.gir_metrics!=0)].min())
-            self.log('gir_loss_mean', self.gir_metrics[np.where(self.gir_metrics!=0)].mean())
-            self.log('gir_loss_max', self.gir_metrics[np.where(self.gir_metrics!=0)].max())
-            self.log('gir_loss_var', torch.var(self.gir_metrics[np.where(self.gir_metrics!=0)]))
+            #self.log('gir_loss_min', self.gir_metrics[np.where(self.gir_metrics!=0)].min())
+            #self.log('gir_loss_mean', self.gir_metrics[np.where(self.gir_metrics!=0)].mean())
+            #self.log('gir_loss_max', self.gir_metrics[np.where(self.gir_metrics!=0)].max())
+            #self.log('gir_loss_var', torch.var(self.gir_metrics[np.where(self.gir_metrics!=0)]))
             self.log('cnn_loss_min', self.cnn_metrics[np.where(self.cnn_metrics!=0)].min())
             self.log('cnn_loss_mean', self.cnn_metrics[np.where(self.cnn_metrics!=0)].mean())
             self.log('cnn_loss_max', self.cnn_metrics[np.where(self.cnn_metrics!=0)].max())
@@ -305,10 +312,10 @@ class FKModule(pl.LightningModule):
             self.log('em_time_mean', self.em_comp_time[np.where(self.em_comp_time!=0)].mean())
             self.log('em_time_max', self.em_comp_time[np.where(self.em_comp_time!=0)].max())
             self.log('em_time_var', torch.var(self.em_comp_time[np.where(self.em_comp_time!=0)]))
-            self.log('gir_time_min', self.gir_comp_time[np.where(self.gir_comp_time!=0)].min())
-            self.log('gir_time_mean', self.gir_comp_time[np.where(self.gir_comp_time!=0)].mean())
-            self.log('gir_time_max', self.gir_comp_time[np.where(self.gir_comp_time!=0)].max())
-            self.log('gir_time_var', torch.var(self.gir_comp_time[np.where(self.gir_comp_time!=0)]))
+            #self.log('gir_time_min', self.gir_comp_time[np.where(self.gir_comp_time!=0)].min())
+            #self.log('gir_time_mean', self.gir_comp_time[np.where(self.gir_comp_time!=0)].mean())
+            #self.log('gir_time_max', self.gir_comp_time[np.where(self.gir_comp_time!=0)].max())
+            #self.log('gir_time_var', torch.var(self.gir_comp_time[np.where(self.gir_comp_time!=0)]))
             self.log('cnn_time_min', self.cnn_comp_time[np.where(self.cnn_comp_time!=0)].min())
             self.log('cnn_time_mean', self.cnn_comp_time[np.where(self.cnn_comp_time!=0)].mean())
             self.log('cnn_time_max', self.cnn_comp_time[np.where(self.cnn_comp_time!=0)].max())
@@ -327,6 +334,11 @@ class FKModule(pl.LightningModule):
 
 
 if __name__ == '__main__':
+    pl.seed_everything(1234)
+    print(sys.executable)
+    #dataset = MNIST(os.getcwd(), train=True, download=True, transform=transforms.ToTensor())
+    #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
+    #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
     gir_loss_min = []
     gir_loss_mean = []
@@ -362,14 +374,13 @@ if __name__ == '__main__':
     em_time_max = []
     em_time_var = []
     
-    for i in range(1,30):
-        
+    for i in range(2,18):
+        dim = 10
         X = 0.5
         T = i * 0.025
-        num_time = 10 * i
-        dim = 19
+        num_time = i
         num_samples = 420
-        batch_size = 20
+        batch_size = 5
         N = 1000
         xs = torch.rand(num_samples,dim) * X
         ts = torch.rand(num_samples,1) * T
@@ -394,6 +405,10 @@ if __name__ == '__main__':
         trainer = pl.Trainer(max_epochs=1, gpus=1, check_val_every_n_epoch=1)
         trainer.fit(model, train_loader, val_loader)
         
+        #gir_loss_min.append(trainer.logged_metrics['gir_loss_min'].item())
+        #gir_loss_mean.append(trainer.logged_metrics['gir_loss_mean'].item())
+        #gir_loss_max.append(trainer.logged_metrics['gir_loss_max'].item())
+        #gir_loss_var.append(trainer.logged_metrics['gir_loss_var'].item())
         cnn_loss_min.append(trainer.logged_metrics['cnn_loss_min'].item())
         cnn_loss_mean.append(trainer.logged_metrics['cnn_loss_mean'].item())
         cnn_loss_max.append(trainer.logged_metrics['cnn_loss_max'].item())
@@ -406,11 +421,11 @@ if __name__ == '__main__':
         em_loss_mean.append(trainer.logged_metrics['em_loss_mean'].item())
         em_loss_max.append(trainer.logged_metrics['em_loss_max'].item())
         em_loss_var.append(trainer.logged_metrics['em_loss_var'].item())
-        gir_loss_min.append(trainer.logged_metrics['em_loss_min'].item())
-        gir_loss_mean.append(trainer.logged_metrics['gir_loss_mean'].item())
-        gir_loss_max.append(trainer.logged_metrics['gir_loss_max'].item())
-        gir_loss_var.append(trainer.logged_metrics['gir_loss_var'].item())
         
+        #gir_time_min.append(trainer.logged_metrics['gir_time_min'].item())
+        #gir_time_mean.append(trainer.logged_metrics['gir_time_mean'].item())
+        #gir_time_max.append(trainer.logged_metrics['gir_time_max'].item())
+        #gir_time_var.append(trainer.logged_metrics['gir_time_var'].item())
         cnn_time_min.append(trainer.logged_metrics['cnn_time_min'].item())
         cnn_time_mean.append(trainer.logged_metrics['cnn_time_mean'].item())
         cnn_time_max.append(trainer.logged_metrics['cnn_time_max'].item())
@@ -426,68 +441,69 @@ if __name__ == '__main__':
         #print(trainer.logged_metrics['val_loss'])
         #print(trainer.logged_metrics['train_loss'])
     #ep = torch.arange(18)
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_loss_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_loss_mean.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_loss_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_loss_min.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_loss_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_loss_max.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_loss_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_loss_var.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_var))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_loss_mean.npy', 'wb') as f:
+        #with open('/scratch/xx84/girsanov/fk/bs/result/dim_ou_gir_loss_mean.npy', 'wb') as f:
+        #    np.save(f, np.array(gir_loss_mean))
+        #with open('/scratch/xx84/girsanov/fk/bs/result/dim_ou_gir_loss_min.npy', 'wb') as f:
+        #    np.save(f, np.array(gir_loss_min))
+        #with open('/scratch/xx84/girsanov/fk/bs/result/dim_ou_gir_loss_max.npy', 'wb') as f:
+        #    np.save(f, np.array(gir_loss_max))
+        #with open('/scratch/xx84/girsanov/fk/bs/result/dim_ou_gir_loss_var.npy', 'wb') as f:
+        #    np.save(f, np.array(gir_loss_var))
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_loss_mean.npy', 'wb') as f:
             np.save(f, np.array(don_loss_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_loss_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_loss_min.npy', 'wb') as f:
             np.save(f, np.array(don_loss_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_loss_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_loss_max.npy', 'wb') as f:
             np.save(f, np.array(don_loss_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_loss_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_loss_var.npy', 'wb') as f:
             np.save(f, np.array(don_loss_var))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_loss_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_loss_mean.npy', 'wb') as f:
             np.save(f, np.array(em_loss_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_loss_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_loss_min.npy', 'wb') as f:
             np.save(f, np.array(em_loss_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_loss_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_loss_max.npy', 'wb') as f:
             np.save(f, np.array(em_loss_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_loss_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_loss_var.npy', 'wb') as f:
             np.save(f, np.array(em_loss_var))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_gir_loss_mean.npy', 'wb') as f:
-            np.save(f, np.array(gir_loss_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_gir_loss_min.npy', 'wb') as f:
-            np.save(f, np.array(gir_loss_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_gir_loss_max.npy', 'wb') as f:
-            np.save(f, np.array(gir_loss_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_gir_loss_var.npy', 'wb') as f:
-            np.save(f, np.array(gir_loss_var))
         
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_time_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_time_mean.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_time_min.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_time_max.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_time_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_time_var.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_var))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_time_mean.npy', 'wb') as f:
+        #with open('/scratch/xx84/girsanov/fk/bs/result/dim_ou_gir_time_mean.npy', 'wb') as f:
+        #    np.save(f, np.array(gir_time_mean))
+        #with open('/scratch/xx84/girsanov/fk/bs/result/dim_ou_gir_time_min.npy', 'wb') as f:
+        #    np.save(f, np.array(gir_time_min))
+        #with open('/scratch/xx84/girsanov/fk/bs/result/dim_ou_gir_time_max.npy', 'wb') as f:
+        #    np.save(f, np.array(gir_time_max))
+        #with open('/scratch/xx84/girsanov/fk/bs/result/dim_ou_gir_time_var.npy', 'wb') as f:
+        #    np.save(f, np.array(gir_time_var))
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_time_mean.npy', 'wb') as f:
             np.save(f, np.array(don_time_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_time_min.npy', 'wb') as f:
             np.save(f, np.array(don_time_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_time_max.npy', 'wb') as f:
             np.save(f, np.array(don_time_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_time_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_time_var.npy', 'wb') as f:
             np.save(f, np.array(don_time_var))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_time_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_time_mean.npy', 'wb') as f:
             np.save(f, np.array(em_time_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_time_min.npy', 'wb') as f:
             np.save(f, np.array(em_time_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_time_max.npy', 'wb') as f:
             np.save(f, np.array(em_time_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_time_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_time_var.npy', 'wb') as f:
             np.save(f, np.array(em_time_var))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_gir_time_mean.npy', 'wb') as f:
-            np.save(f, np.array(gir_time_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_gir_time_min.npy', 'wb') as f:
-            np.save(f, np.array(gir_time_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_gir_time_max.npy', 'wb') as f:
-            np.save(f, np.array(gir_time_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_gir_time_var.npy', 'wb') as f:
-            np.save(f, np.array(gir_time_var))
+            
