@@ -138,9 +138,9 @@ class FKModule(pl.LightningModule):
         # calculate values using euler-maruyama
         start = time.time()
         x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
-        x[0,:,:,:] = xs.squeeze()
+        x[0,:,:,:] = xs
         for i in range(self.num_time-1):
-            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef, self.dim).squeeze() * self.dt + self.dB[i,:,:,:]
+            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef, self.dim) * self.dt + self.dB[i,:,:,:]
         p0mux = initial(x)
         u_em = p0mux.mean(1)
         end = time.time()
@@ -232,7 +232,7 @@ if __name__ == '__main__':
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
-    for dim in range(2,20):
+    for dim in range(1,2):
         x0 = 0.1
         X = 0.5
         T = 0.1
