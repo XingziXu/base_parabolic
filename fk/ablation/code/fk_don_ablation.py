@@ -118,9 +118,9 @@ class FKModule(pl.LightningModule):
         p0Bx = initial(Bx)
         # calculate values using euler-maruyama
         x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
-        x[0,:,:,:] = xs.squeeze()
+        x[0,:,:,:] = xs
         for i in range(self.num_time-1):
-            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef, self.dim).squeeze() * self.dt + self.dB[i,:,:,:]
+            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef, self.dim) * self.dt + self.dB[i,:,:,:]
         p0mux = initial(x)
         u_em = p0mux.mean(1)
         # calculate values using girsanov
@@ -193,7 +193,7 @@ if __name__ == '__main__':
     #mnist_train, mnist_val = random_split(dataset, [55000,5000])
     device = torch.device("cuda:0")
     
-    for dim in range(2,20):
+    for dim in range(1,2):
     
         m=100
         p=15
