@@ -112,8 +112,6 @@ class FKModule(pl.LightningModule):
         self.batch_size = batch_size
         # input size is dimension of brownian motion x 2, since the input to the RNN block is W_s^x and dW_s^x
         input_size = self.dim * 2 + 1
-        # hidden_size is dimension of the RNN output
-        input_size = self.dim * 2 + 1
         # num_layers is the number of RNN blocks
         num_layers = 3
         # num_outputs is the number of ln(rho(x,t))
@@ -324,6 +322,19 @@ class FKModule(pl.LightningModule):
             self.log('don_time_mean', self.don_comp_time[np.where(self.don_comp_time!=0)].mean())
             self.log('don_time_max', self.don_comp_time[np.where(self.don_comp_time!=0)].max())
             self.log('don_time_var', torch.var(self.don_comp_time[np.where(self.don_comp_time!=0)]))
+        
+            with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_'+str(self.num_time)+'_bs_cnn_loss.npy', 'wb') as f:
+                np.save(f, np.array(self.cnn_metrics))
+            with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_'+str(self.num_time)+'_bs_em_loss.npy', 'wb') as f:
+                np.save(f, np.array(self.em_metrics))
+            with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_'+str(self.num_time)+'_bs_don_loss.npy', 'wb') as f:
+                np.save(f, np.array(self.don_metrics))
+            with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_'+str(self.num_time)+'_bs_cnn_time.npy', 'wb') as f:
+                np.save(f, np.array(self.cnn_comp_time))
+            with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_'+str(self.num_time)+'_bs_em_time.npy', 'wb') as f:
+                np.save(f, np.array(self.em_comp_time))
+            with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_'+str(self.num_time)+'_bs_don_time.npy', 'wb') as f:
+                np.save(f, np.array(self.don_comp_time))
         return #{'loss': loss_total}
 
     def configure_optimizers(self):
@@ -374,14 +385,14 @@ if __name__ == '__main__':
     em_time_max = []
     em_time_var = []
     
-    for i in range(2,30):
+    for i in range(1,25):
         dim = 10
         X = 0.5
         T = i * 0.025
-        num_time = i
+        num_time = i * 10
         num_samples = 420
         batch_size = 5
-        N = 4000
+        N = 1000
         xs = torch.rand(num_samples,dim) * X
         ts = torch.rand(num_samples,1) * T
         dataset = torch.cat((xs,ts),dim=1)
@@ -441,13 +452,13 @@ if __name__ == '__main__':
         #print(trainer.logged_metrics['val_loss'])
         #print(trainer.logged_metrics['train_loss'])
     #ep = torch.arange(18)
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_loss_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_loss_mean.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_loss_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_loss_min.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_loss_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_loss_max.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_loss_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_loss_var.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_var))
         #with open('/scratch/xx84/girsanov/fk/bs/result/dim_ou_gir_loss_mean.npy', 'wb') as f:
         #    np.save(f, np.array(gir_loss_mean))
@@ -457,30 +468,30 @@ if __name__ == '__main__':
         #    np.save(f, np.array(gir_loss_max))
         #with open('/scratch/xx84/girsanov/fk/bs/result/dim_ou_gir_loss_var.npy', 'wb') as f:
         #    np.save(f, np.array(gir_loss_var))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_loss_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_loss_mean.npy', 'wb') as f:
             np.save(f, np.array(don_loss_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_loss_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_loss_min.npy', 'wb') as f:
             np.save(f, np.array(don_loss_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_loss_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_loss_max.npy', 'wb') as f:
             np.save(f, np.array(don_loss_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_loss_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_loss_var.npy', 'wb') as f:
             np.save(f, np.array(don_loss_var))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_loss_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_loss_mean.npy', 'wb') as f:
             np.save(f, np.array(em_loss_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_loss_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_loss_min.npy', 'wb') as f:
             np.save(f, np.array(em_loss_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_loss_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_loss_max.npy', 'wb') as f:
             np.save(f, np.array(em_loss_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_loss_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_loss_var.npy', 'wb') as f:
             np.save(f, np.array(em_loss_var))
         
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_time_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_time_mean.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_time_min.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_time_max.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_cnn_time_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_cnn_time_var.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_var))
         #with open('/scratch/xx84/girsanov/fk/bs/result/dim_ou_gir_time_mean.npy', 'wb') as f:
         #    np.save(f, np.array(gir_time_mean))
@@ -490,20 +501,20 @@ if __name__ == '__main__':
         #    np.save(f, np.array(gir_time_max))
         #with open('/scratch/xx84/girsanov/fk/bs/result/dim_ou_gir_time_var.npy', 'wb') as f:
         #    np.save(f, np.array(gir_time_var))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_time_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_time_mean.npy', 'wb') as f:
             np.save(f, np.array(don_time_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_time_min.npy', 'wb') as f:
             np.save(f, np.array(don_time_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_time_max.npy', 'wb') as f:
             np.save(f, np.array(don_time_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_don_time_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_don_time_var.npy', 'wb') as f:
             np.save(f, np.array(don_time_var))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_time_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_time_mean.npy', 'wb') as f:
             np.save(f, np.array(em_time_mean))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_time_min.npy', 'wb') as f:
             np.save(f, np.array(em_time_min))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_time_max.npy', 'wb') as f:
             np.save(f, np.array(em_time_max))
-        with open('/scratch/xx84/girsanov/fk/bs/result/dim_bs_em_time_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fk/bs/result/'+str(dim)+'_bs_em_time_var.npy', 'wb') as f:
             np.save(f, np.array(em_time_var))
             
