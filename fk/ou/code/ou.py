@@ -269,7 +269,7 @@ class FKModule(pl.LightningModule):
         loss_cnn = F.mse_loss(u_cnn,u_gt,reduction='mean')/(torch.abs(u_gt).mean())
         loss_gir = F.mse_loss(u_gir,u_gt,reduction='mean')/(torch.abs(u_gt).mean())
         loss_em = F.mse_loss(u_em,u_gt,reduction='mean')/(torch.abs(u_gt).mean())
-        loss_don = F.nse_loss(u_don,u_gt,reduction='mean')/(torch.abs(u_gt).mean())
+        loss_don = F.mse_loss(u_don,u_gt,reduction='mean')/(torch.abs(u_gt).mean())
         #print('Validation: {:.4f}, {:.4f}'.format(loss, loss_g))
         #self.log('val_loss', loss)
         if not loss_cnn.isnan():
