@@ -326,7 +326,7 @@ if __name__ == '__main__':
     i=100
     dim = 1
     X = 0.5
-    T = i * 0.025
+    T = i * 0.01
     num_time = i
     num_samples = 200
     batch_size = 100

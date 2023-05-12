@@ -186,9 +186,9 @@ class FKModule(pl.LightningModule):
         # calculate values using euler-maruyama
         start = time.time()
         x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
-        x[0,:,:,:] = xs.squeeze()
+        x[0,:,:,:] = xs
         for i in range(self.num_time-1):
-            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef, self.dim).squeeze() * self.dt + self.dB_em[i,:,:,:]
+            x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef, self.dim) * self.dt + self.dB_em[i,:,:,:]
         p0mux = initial(x)
         u_em = p0mux.mean(1)
         end = time.time()
@@ -332,7 +332,7 @@ if __name__ == '__main__':
     em_time_max = []
     em_time_var = []
     
-    for dim in range(2,18):
+    for dim in range(1,19):
         i = 50
         X = 0.5
         T = i * 0.025
