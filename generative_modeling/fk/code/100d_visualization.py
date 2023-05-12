@@ -4,7 +4,7 @@ import torch
 import matplotlib
 import seaborn as sns
 
-matplotlib.rcParams.update({'font.size': 15})
+matplotlib.rcParams.update({'font.size': 30})
 
 with open('/scratch/xx84/girsanov/generative_modeling/fk/result/100dgaussian_bpd_nf_0.npy', 'rb') as f:
     bpd_nf_100 = np.load(f)
@@ -43,20 +43,21 @@ wass_std_100 = wass_std_100[(wass_std_100 <= max_wass_100)]
 f = plt.figure(figsize=(12, 8))
 gs = f.add_gridspec(1, 2)
 
-with sns.axes_style("darkgrid"):
+with sns.axes_style("whitegrid"):
     ax = f.add_subplot(gs[0])
-    sns.regplot(x=wass_nf_2, y=bpd_nf_2, scatter_kws={'color': 'purple', 'alpha': 0.3}, line_kws = {'color': 'purple', 'alpha': 0.3, 'lw':6}, label='$p_{meta}$')
-    sns.regplot(x=wass_std_2, y=bpd_std_2, scatter_kws={'color': 'green', 'alpha': 0.3}, line_kws={'color': 'green'}, label='Gaussian', x_ci = 99)
+    sns.regplot(x=wass_nf_2, y=bpd_nf_2, scatter_kws={'color': 'teal', 'alpha': 0.3, 's':100}, line_kws = {'color': 'teal', 'alpha': 0.9,'lw':2}, label='$p_{meta}$')
+    sns.regplot(x=wass_std_2, y=bpd_std_2, scatter_kws={'color': 'tomato', 'alpha': 0.3, 's':100}, line_kws={'color': 'tomato', 'alpha': 0.9,'lw':2}, label='Gaussian')
     ax.set(xlabel='Wasserstein Distance', ylabel='Bits/Dim', title='2D')
 
-with sns.axes_style("darkgrid"):
+with sns.axes_style("whitegrid"):
     ax = f.add_subplot(gs[1])
-    sns.regplot(x=wass_nf_100, y=bpd_nf_100, scatter_kws = {'color': 'purple', 'alpha': 0.3}, line_kws = {'color': 'purple', 'alpha': 0.3, 'lw':6}, label='$p_{meta}$')
-    sns.regplot(x=wass_std_100, y=bpd_std_100, scatter_kws={'color': 'green', 'alpha': 0.3}, line_kws={'color': 'green'}, label='Gaussian', x_ci = 99)
+    sns.regplot(x=wass_nf_100, y=bpd_nf_100, scatter_kws = {'color': 'teal', 'alpha': 0.3, 's':100}, line_kws = {'color': 'teal', 'alpha': 0.9,'lw':2}, label='$p_{meta}$')
+    sns.regplot(x=wass_std_100, y=bpd_std_100, scatter_kws={'color': 'tomato', 'alpha': 0.3, 's':100}, line_kws={'color': 'tomato', 'alpha': 0.9,'lw':2}, label='Gaussian')
     ax.set(xlabel='Wasserstein Distance', ylabel='Bits/Dim', title='100D')
 
 handles, labels = ax.get_legend_handles_labels()
-f.legend(handles, labels, loc='upper right')
+f.legend(handles, labels, loc='upper center')
 
 plt.tight_layout()
-plt.savefig('/scratch/xx84/girsanov/generative_modeling/fk/figure/meta_reg.pdf')
+plt.savefig('/scratch/xx84/girsanov/generative_modeling/fk/figure/meta_reg.png')
+plt.clf()

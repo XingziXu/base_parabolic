@@ -173,7 +173,7 @@ class FKModule(pl.LightningModule):
     def loss(self, xt, coef):
         coef = coef
         xs = torch.linspace(-1., 1., steps=self.batch_size).unsqueeze(-1).to(device)
-        """
+        
         # calculate values using euler-maruyama
         start = time.time()
         x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
@@ -194,7 +194,7 @@ class FKModule(pl.LightningModule):
         u_gir = (p0Bx_gir * expmart * r_value(self.dim, self.t).unsqueeze(-1).unsqueeze(-1)).mean(1)
         end = time.time()
         time_gir = (end - start)
-        """
+        
         # calculate values using CNN
         Bx_cnn = (xs.unsqueeze(0).unsqueeze(0)+self.B0_cnn)
         p0Bx_cnn = initial(dim, Bx_cnn).squeeze()
@@ -210,7 +210,7 @@ class FKModule(pl.LightningModule):
         
         # calculate ground truth values
         u_gt = ou_pdf(self.dim, xs.unsqueeze(0), self.t.unsqueeze(-1)).squeeze()
-        """
+        
         # calculate values using deeponet
         axis = torch.Tensor([]).to(device)
         for i in range(self.num_time):
@@ -218,16 +218,22 @@ class FKModule(pl.LightningModule):
             axis = torch.cat((axis,current_axis),dim=0)
         start = time.time()
         branchs = self.branch(self.sensors.unsqueeze(0)).repeat(self.batch_size*(self.num_time), 1)
-        u_don = torch.zeros_like(u_em)
+        u_don = torch.zeros_like(u_cnn)
         trunks = self.trunk(axis)
         u_don = (branchs * trunks).sum(1).reshape(u_gir.shape)
         end = time.time()
         time_don = (end - start)
-        """
+        
         with open('/scratch/xx84/girsanov/fk/ou/result/ou_cnn_1d_vis.npy', 'wb') as f:
             np.save(f, np.array(u_cnn.detach().cpu()))
         with open('/scratch/xx84/girsanov/fk/ou/result/ou_gt_1d_vis.npy', 'wb') as f:
             np.save(f, np.array(u_gt.detach().cpu()))
+        with open('/scratch/xx84/girsanov/fk/ou/result/ou_don_1d_vis.npy', 'wb') as f:
+            np.save(f, np.array(u_don.detach().cpu()))
+        with open('/scratch/xx84/girsanov/fk/ou/result/ou_gir_1d_vis.npy', 'wb') as f:
+            np.save(f, np.array(u_gir.detach().cpu()))
+        with open('/scratch/xx84/girsanov/fk/ou/result/ou_em_1d_vis.npy', 'wb') as f:
+            np.save(f, np.array(u_em.detach().cpu()))
         return u_cnn, time_cnn, u_gt
 
     def training_step(self, batch, batch_idx):
@@ -330,7 +336,7 @@ if __name__ == '__main__':
     num_time = i
     num_samples = 200
     batch_size = 100
-    N = 1000
+    N = 3000
     xs = torch.rand(num_samples,dim) * X
     ts = torch.rand(num_samples,1) * T
     dataset = torch.cat((xs,ts),dim=1)
