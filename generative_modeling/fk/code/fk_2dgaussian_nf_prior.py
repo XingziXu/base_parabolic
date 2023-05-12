@@ -249,7 +249,7 @@ class FKModule(pl.LightningModule):
             
         # Construct flow model
         model = nf.NormalizingFlow(base, flows) 
-        model.load_state_dict(torch.load('/scratch/xx84/girsanov/generative_modeling/nf/nf_prior.pt'))
+        model.load_state_dict(torch.load('/scratch/xx84/girsanov/generative_modeling/nf/trained_model/nf_prior.pt'))
         self.p0 = model
     
     def loss(self, batch):
@@ -346,7 +346,7 @@ class FKModule(pl.LightningModule):
         plt.scatter(xT[:,0], xT[:,1], alpha=0.1, label=r'$X_T$')
         plt.scatter(x0[:,0], x0[:,1], alpha=0.1, label=r'$X_0$')
         plt.legend()
-        plt.savefig('/scratch/xx84/girsanov/generative_modeling/fokker_planck_elbo.png')
+        plt.savefig('/scratch/xx84/girsanov/generative_modeling/fk/figure/fokker_planck_elbo.png')
         plt.clf()
         """
         xs = torch.linspace(-2, 3, steps=100)
@@ -419,14 +419,14 @@ if __name__ == '__main__':
         
     # Construct flow model
     model = nf.NormalizingFlow(base, flows) 
-    model.load_state_dict(torch.load('/scratch/xx84/girsanov/generative_modeling/nf/nf_prior.pt'))
+    model.load_state_dict(torch.load('/scratch/xx84/girsanov/generative_modeling/nf/trained_model/nf_prior.pt'))
     p0 = model
     d0 = p0.sample(500)[0].detach().numpy()
     Loss =  SamplesLoss("sinkhorn", blur=0.05,)
     loss = []
 
-    for i in range(10):
-        p_i = MultivariateNormal(torch.zeros(dim) + 1. * i * torch.ones(dim), torch.eye(dim))
+    for i in range(100):
+        p_i = MultivariateNormal(torch.zeros(dim) + 0.2 * i * torch.ones(dim), torch.eye(dim))
         trainset = p_i.sample([2000])
         testset = p_i.sample([200])
         train_loader = torch.utils.data.DataLoader(trainset, batch_size = 200, shuffle=True, num_workers = 1)
@@ -439,9 +439,9 @@ if __name__ == '__main__':
         val_bpd.append(trainer.logged_metrics['val_loss'])
         loss.append(Loss(torch.tensor(d0).type(torch.FloatTensor),torch.tensor(trainset).type(torch.FloatTensor)).item())
 
-    with open('/scratch/xx84/girsanov/generative_modeling/2dgaussian_bpd_nf_0.npy', 'wb') as f:
+    with open('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_bpd_nf_0.npy', 'wb') as f:
         np.save(f, val_bpd)
-    with open('/scratch/xx84/girsanov/generative_modeling/2dgaussian_loss_nf_0.npy', 'wb') as f:
+    with open('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_loss_nf_0.npy', 'wb') as f:
         np.save(f, loss)
     fig = plt.figure()
     ax0 = fig.add_subplot(111)
@@ -452,5 +452,5 @@ if __name__ == '__main__':
     #ax1.scatter(loss[0:2], loss_time[0:2])
     #ax1.set_ylabel('integration time')
     ax0.set_xlabel('Wasserstein distance')
-    plt.savefig('bpd_toy_fokker_planck_2d_nf.png')
+    plt.savefig('/scratch/xx84/girsanov/generative_modeling/fk/figure/bpd_toy_fokker_planck_2d_nf.png')
     print(pearsonr(loss, val_bpd))

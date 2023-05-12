@@ -38,6 +38,6 @@ ax[1].set_xlabel('$T$')
 ax[1].set_ylabel('$X$')
 
 plt.tight_layout()
-plt.savefig('/scratch/xx84/girsanov/fk/ou/figure/1d_vis_ou.png')
+plt.savefig('/scratch/xx84/girsanov/fk/ou/figure/1d_vis_ou.pdf')
 plt.clf()
 
