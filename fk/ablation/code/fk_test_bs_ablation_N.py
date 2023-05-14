@@ -177,9 +177,9 @@ class FKModule(pl.LightningModule):
         coef = coef
         
         # calculate values using euler-maruyama
-        start = time.time()
         x = torch.zeros(self.num_time, self.N, batch_size, self.dim).to(device)
         x[0,:,:,:] = xs
+        start = time.time()
         for i in range(self.num_time-1):
             x[i+1,:,:,:] = x[i,:,:,:] + drift(x[i,:,:,:], coef, self.r) * self.dt + self.dB_em[i,:,:,:] * diffusion(x[i,:,:,:], self.t[i], self.sigma)
         p0mux = terminal(dim, x, self.k).squeeze()
@@ -195,7 +195,6 @@ class FKModule(pl.LightningModule):
             x[i+1,:,:,:] = xs * torch.exp((-self.r-0.5*self.sigma**2)*(self.T-t_current)+self.sigma*(self.B0_gir[-1,:,:,:]-self.B0_gir[i,:,:,:]))
         p0mux = terminal(dim, x, self.k).squeeze()
         u_gt = (p0mux * r_value(self.dim, self.t).unsqueeze(-1).unsqueeze(-1)).mean(1)
-        end = time.time()
         
         # calculate values using girsanov
         #Bx_gir = (xs.unsqueeze(0).unsqueeze(0)+self.B0_gir)
@@ -387,10 +386,10 @@ if __name__ == '__main__':
     
     for N in np.arange(50,1000,50):
         dim = 10
-        i = 50
+        i = 40
         X = 0.5
         T = i * 0.025
-        num_time = 10 * i
+        num_time = i
         num_samples = 420
         batch_size = 5
         xs = torch.rand(num_samples,dim) * X

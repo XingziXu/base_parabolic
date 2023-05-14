@@ -193,8 +193,8 @@ class FKModule(pl.LightningModule):
         # calculate values using girsanov
         Bx_gir = (xs.unsqueeze(0).unsqueeze(0)+self.B0_gir)
         p0Bx_gir = initial(dim, Bx_gir).squeeze()
-        start = time.time()
         muBx_gir = drift(Bx_gir, coef)
+        start = time.time()
         expmart = torch.exp((torch.cumsum(muBx_gir*self.dB_gir,dim=0) - 0.5 * torch.cumsum((muBx_gir ** 2) * self.dt,dim=0)).sum(-1))
         u_gir = (p0Bx_gir * expmart * r_value(self.dim, self.t).unsqueeze(-1).unsqueeze(-1)).mean(1)
         end = time.time()
@@ -368,10 +368,10 @@ if __name__ == '__main__':
     
     for N in np.arange(50,1000,50):
         dim = 10
-        i = 50
+        i = 40
         X = 0.5
         T = i * 0.025
-        num_time = 10 * i
+        num_time = i
         num_samples = 420
         batch_size = 5
         xs = torch.rand(num_samples,dim) * X

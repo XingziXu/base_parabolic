@@ -334,10 +334,10 @@ if __name__ == '__main__':
     em_time_var = []
     
     for N in np.arange(50,1000,50):
-        i = 50
+        i = 40
         X = 0.5
         T = i * 0.025
-        num_time = 10 * i
+        num_time = i
         num_samples = 420
         batch_size = 5
         dim = 10

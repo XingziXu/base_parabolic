@@ -230,5 +230,5 @@ lines_labels = [ax[1,0].get_legend_handles_labels()]
 lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
 fig.legend(lines, labels)
 plt.tight_layout()
-plt.savefig('/scratch/xx84/girsanov/fbsde/'+name+'/figure/ablation_loss_fbfk.pdf')
+plt.savefig('/scratch/xx84/girsanov/fbsde/'+name+'/figure/ablation_loss_fbfk.png')
 plt.clf()
