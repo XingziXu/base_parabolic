@@ -224,11 +224,12 @@ class FKModule(pl.LightningModule):
         time_gir = (end - start)
         # calculation with cnn
         
-        start = time.time()
+        
         muBx = b(self.t, xi, coef, self.dim)
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
         input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
+        start = time.time()
         cnn_expmart = self.relu(self.expmart_cnn(input_reshaped).sum(-2)).reshape(self.num_time, self.N, self.batch_size)
         
         
@@ -269,22 +270,25 @@ class FKModule(pl.LightningModule):
         time_don = (end - start)
         if em:
             # calculation with EM
-            start = time.time()
+            
             xs = xt[:,:-1]
             ts = xt[:,-1]
             xi= xs.unsqueeze(0).repeat(N,1,1)
             xi = xi.unsqueeze(0)
             xi.requires_grad = True
+            yi = torch.zeros(self.num_time, self.N, self.batch_size).to(device)
+            zi_em = torch.zeros_like(self.dB)
+            start = time.time()
             for i in range(0,self.num_time-1):
                 x_current = xi[i,:,:,:] + b(self.t[i], xi[i,:,:,:], coef, self.dim) * self.dt + sigma(self.t[i], xi[i,:,:,:]).to(device) * self.dB[i,:,:,:]
                 xi = torch.cat((xi, x_current.unsqueeze(0)),dim=0)
             
             xT = xi[-1,:,:,:]
             yT = g(xT)
-            yi = torch.zeros(self.num_time, self.N, self.batch_size).to(device)
+            
             yi[-1,:,:] = yT
             vi = yT.mean(0)
-            zi_em = torch.zeros_like(xi)
+            
             z_current = sigma(torch.Tensor([T]),xT).to(device) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
             zi_em[-1,:,:,:] = z_current
             for i in reversed(range(1,self.num_time)):
