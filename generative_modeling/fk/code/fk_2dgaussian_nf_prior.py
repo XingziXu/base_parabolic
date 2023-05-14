@@ -439,18 +439,18 @@ if __name__ == '__main__':
         val_bpd.append(trainer.logged_metrics['val_loss'])
         loss.append(Loss(torch.tensor(d0).type(torch.FloatTensor),torch.tensor(trainset).type(torch.FloatTensor)).item())
 
-    with open('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_bpd_nf_0.npy', 'wb') as f:
-        np.save(f, val_bpd)
-    with open('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_loss_nf_0.npy', 'wb') as f:
-        np.save(f, loss)
-    fig = plt.figure()
-    ax0 = fig.add_subplot(111)
-    ax0.scatter(loss, val_bpd)
-    ax0.set_ylabel('ELBO Loss')
-    #ax1 = fig.add_subplot(212)
-    #ax1.plot(loss[2:], loss_time[2:])
-    #ax1.scatter(loss[0:2], loss_time[0:2])
-    #ax1.set_ylabel('integration time')
-    ax0.set_xlabel('Wasserstein distance')
-    plt.savefig('/scratch/xx84/girsanov/generative_modeling/fk/figure/bpd_toy_fokker_planck_2d_nf.png')
-    print(pearsonr(loss, val_bpd))
+        with open('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_bpd_nf_0.npy', 'wb') as f:
+            np.save(f, val_bpd)
+        with open('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_loss_nf_0.npy', 'wb') as f:
+            np.save(f, loss)
+        fig = plt.figure()
+        ax0 = fig.add_subplot(111)
+        ax0.scatter(loss, val_bpd)
+        ax0.set_ylabel('ELBO Loss')
+        #ax1 = fig.add_subplot(212)
+        #ax1.plot(loss[2:], loss_time[2:])
+        #ax1.scatter(loss[0:2], loss_time[0:2])
+        #ax1.set_ylabel('integration time')
+        ax0.set_xlabel('Wasserstein distance')
+        plt.savefig('/scratch/xx84/girsanov/generative_modeling/fk/figure/bpd_toy_fokker_planck_2d_nf.png')
+        print(pearsonr(loss, val_bpd))

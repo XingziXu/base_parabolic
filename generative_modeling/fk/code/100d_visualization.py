@@ -47,17 +47,17 @@ with sns.axes_style("whitegrid"):
     ax = f.add_subplot(gs[0])
     sns.regplot(x=wass_nf_2, y=bpd_nf_2, scatter_kws={'color': 'teal', 'alpha': 0.3, 's':100}, line_kws = {'color': 'teal', 'alpha': 0.9,'lw':2}, label='$p_{meta}$')
     sns.regplot(x=wass_std_2, y=bpd_std_2, scatter_kws={'color': 'tomato', 'alpha': 0.3, 's':100}, line_kws={'color': 'tomato', 'alpha': 0.9,'lw':2}, label='Gaussian')
-    ax.set(xlabel='Wasserstein Distance', ylabel='Bits/Dim', title='2D')
+    ax.set(xlabel='Wasserstein Distance', ylabel='Bits/Dim', title='$2$-$d$')
 
 with sns.axes_style("whitegrid"):
     ax = f.add_subplot(gs[1])
     sns.regplot(x=wass_nf_100, y=bpd_nf_100, scatter_kws = {'color': 'teal', 'alpha': 0.3, 's':100}, line_kws = {'color': 'teal', 'alpha': 0.9,'lw':2}, label='$p_{meta}$')
     sns.regplot(x=wass_std_100, y=bpd_std_100, scatter_kws={'color': 'tomato', 'alpha': 0.3, 's':100}, line_kws={'color': 'tomato', 'alpha': 0.9,'lw':2}, label='Gaussian')
-    ax.set(xlabel='Wasserstein Distance', ylabel='Bits/Dim', title='100D')
+    ax.set(xlabel='Wasserstein Distance', title='$100$-$d$')
 
 handles, labels = ax.get_legend_handles_labels()
 f.legend(handles, labels, loc='upper center')
 
 plt.tight_layout()
-plt.savefig('/scratch/xx84/girsanov/generative_modeling/fk/figure/meta_reg.png')
+plt.savefig('/scratch/xx84/girsanov/generative_modeling/fk/figure/meta_reg.pdf')
 plt.clf()
