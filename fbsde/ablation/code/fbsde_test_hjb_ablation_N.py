@@ -184,7 +184,6 @@ class FKModule(pl.LightningModule):
 
     def loss(self, xt, coef, coef1, em = False):
         # calculation with cnn
-        start = time.time()
         xs = xt[:,:-1]
         ts = xt[:,-1]
         sigmas = np.sqrt(2)
@@ -194,6 +193,7 @@ class FKModule(pl.LightningModule):
         input = torch.zeros(self.num_time, self.N, self.batch_size, self.dim * 2 + 1).to(device)
         input[:muBx.shape[0],:,:,:] = torch.cat((muBx,self.dB,self.dt*torch.ones(self.dB.shape[0],self.dB.shape[1],self.dB.shape[2],1).to(device)),dim=-1)
         input_reshaped = input.reshape(input.shape[1]*input.shape[2], input.shape[3], input.shape[0])
+        start = time.time()
         cnn_expmart = self.relu(self.expmart_cnn(input_reshaped).sum(-2)).reshape(self.num_time, self.N, self.batch_size)
         xT = xi[-1,:,:,:]
         yT = g(xT) * cnn_expmart[-1,:,:]
@@ -216,9 +216,10 @@ class FKModule(pl.LightningModule):
         end = time.time()
         time_cnn = (end - start)
         # calculation with don
-        start = time.time()
+        
         branchs = self.branch(self.sensors.unsqueeze(0)).repeat(self.batch_size, 1)
         v_don = torch.zeros(self.num_time, self.batch_size).to(device)
+        start = time.time()
         for i in range(self.num_time-1):
             trunks = self.trunk(torch.cat((xs,i*self.dt*torch.ones(xs.shape[0],1).to(device)),dim=1))
             v_don[i,:] = (branchs * trunks).sum(1)
@@ -227,14 +228,16 @@ class FKModule(pl.LightningModule):
         time_don = (end - start)
         if em:
             # calculation with EM
+            yi = torch.zeros(self.num_time, self.N, self.batch_size).to(device)
+            zi_em = torch.zeros_like(self.dB)
+            start = time.time()
             xi = torch.cumsum(self.dB * sigmas,dim=0) + xs.unsqueeze(0).unsqueeze(0).repeat(self.num_time,N,1,1)
             xi.requires_grad = True
             xT = xi[-1,:,:,:]
             yT = g(xT)
-            yi = torch.zeros(self.num_time, self.N, self.batch_size).to(device)
             yi[-1,:,:] = yT
             vi = yT.mean(0)
-            zi_em = torch.zeros_like(xi)
+            
             z_current = np.sqrt(2) * torch.autograd.grad(outputs=vi,inputs=xT,grad_outputs=torch.ones_like(vi).to(device),retain_graph=True)[0]
             zi_em[-1,:,:,:] = z_current
             for i in reversed(range(1,self.num_time)):
@@ -439,60 +442,60 @@ if __name__ == '__main__':
         #print(trainer.logged_metrics['val_loss'])
         #print(trainer.logged_metrics['train_loss'])
         #ep = torch.arange(18)
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_cnn_loss_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_cnn_loss_mean.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_mean))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_cnn_loss_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_cnn_loss_min.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_min))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_cnn_loss_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_cnn_loss_max.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_max))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_cnn_loss_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_cnn_loss_var.npy', 'wb') as f:
             np.save(f, np.array(cnn_loss_var))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_gir_loss_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_gir_loss_mean.npy', 'wb') as f:
             np.save(f, np.array(gir_loss_mean))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_gir_loss_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_gir_loss_min.npy', 'wb') as f:
             np.save(f, np.array(gir_loss_min))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_gir_loss_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_gir_loss_max.npy', 'wb') as f:
             np.save(f, np.array(gir_loss_max))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_gir_loss_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_gir_loss_var.npy', 'wb') as f:
             np.save(f, np.array(gir_loss_var))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_don_loss_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_don_loss_mean.npy', 'wb') as f:
             np.save(f, np.array(don_loss_mean))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_don_loss_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_don_loss_min.npy', 'wb') as f:
             np.save(f, np.array(don_loss_min))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_don_loss_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_don_loss_max.npy', 'wb') as f:
             np.save(f, np.array(don_loss_max))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_don_loss_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_don_loss_var.npy', 'wb') as f:
             np.save(f, np.array(don_loss_var))
         
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_cnn_time_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_cnn_time_mean.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_mean))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_cnn_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_cnn_time_min.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_min))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_cnn_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_cnn_time_max.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_max))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_cnn_time_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_cnn_time_var.npy', 'wb') as f:
             np.save(f, np.array(cnn_time_var))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_gir_time_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_gir_time_mean.npy', 'wb') as f:
             np.save(f, np.array(gir_time_mean))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_gir_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_gir_time_min.npy', 'wb') as f:
             np.save(f, np.array(gir_time_min))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_gir_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_gir_time_max.npy', 'wb') as f:
             np.save(f, np.array(gir_time_max))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_gir_time_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_gir_time_var.npy', 'wb') as f:
             np.save(f, np.array(gir_time_var))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_don_time_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_don_time_mean.npy', 'wb') as f:
             np.save(f, np.array(don_time_mean))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_don_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_don_time_min.npy', 'wb') as f:
             np.save(f, np.array(don_time_min))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_don_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_don_time_max.npy', 'wb') as f:
             np.save(f, np.array(don_time_max))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_don_time_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_don_time_var.npy', 'wb') as f:
             np.save(f, np.array(don_time_var))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_em_time_mean.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_em_time_mean.npy', 'wb') as f:
             np.save(f, np.array(em_time_mean))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_em_time_min.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_em_time_min.npy', 'wb') as f:
             np.save(f, np.array(em_time_min))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_em_time_max.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_em_time_max.npy', 'wb') as f:
             np.save(f, np.array(em_time_max))
-        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/dim_hjb_em_time_var.npy', 'wb') as f:
+        with open('/scratch/xx84/girsanov/fbsde/ablation/result_N/N_hjb_em_time_var.npy', 'wb') as f:
             np.save(f, np.array(em_time_var))
