@@ -333,7 +333,7 @@ if __name__ == '__main__':
     em_time_var = []
     
     for dim in range(1,19):
-        i = 100
+        i = 40
         X = 0.5
         T = i * 0.025
         num_time = i
