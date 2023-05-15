@@ -100,7 +100,7 @@ ax[1,0].fill_between(ep, np.array(em_mean_t-em_var_t), np.array(em_mean_t+em_var
 ax[1,0].plot(ep, np.array(don_mean_t), label='DON',color='slateblue', lw=3)
 ax[1,0].fill_between(ep, np.array(don_mean_t-don_var_t), np.array(don_mean_t+don_var_t), alpha=0.2,color='slateblue')
 ax[1,0].set_ylabel('Inference Time')
-ax[1,0].set_xlabel('Number of Samples')
+ax[1,0].set_xlabel('Dimension')
 ax[1,0].grid()
 
 
@@ -208,7 +208,7 @@ ax[1,1].fill_between(ep, np.array(ou_gir_mean_t-ou_gir_var_t), np.array(ou_gir_m
 ax[1,1].plot(ep, np.array(ou_don_mean_t), label='DON',color='slateblue', lw=3)
 ax[1,1].fill_between(ep, np.array(ou_don_mean_t-ou_don_var_t), np.array(ou_don_mean_t+ou_don_var_t), alpha=0.2,color='slateblue')
 #ax[1,1].set_ylabel('Inference Time')
-ax[1,1].set_xlabel('Number of Samples')
+ax[1,1].set_xlabel('Dimension')
 ax[1,1].grid()
 
 ##############################################################################################
@@ -290,7 +290,7 @@ ax[1,2].fill_between(ep, np.array(bs_em_mean_t-bs_em_var_t), np.array(bs_em_mean
 ax[1,2].plot(ep, np.array(bs_don_mean_t), label='DON',color='slateblue', lw=3)
 ax[1,2].fill_between(ep, np.array(bs_don_mean_t-bs_don_var_t), np.array(bs_don_mean_t+bs_don_var_t), alpha=0.2,color='slateblue')
 #ax[1,2].set_ylabel('Inference Time')
-ax[1,2].set_xlabel('Number of Samples')
+ax[1,2].set_xlabel('Dimension')
 ax[1,2].grid()
 
 lines_labels = [ax[1,0].get_legend_handles_labels()]
