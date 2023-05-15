@@ -371,7 +371,7 @@ if __name__ == '__main__':
     em_time_var = []
     
     for dim in range(1,19):
-        i = 100
+        i = 40
         m=100
         p=15
         x0 = 0.1
