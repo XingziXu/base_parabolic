@@ -371,10 +371,10 @@ if __name__ == '__main__':
     
     for N in np.arange(50,1000,50):
         dim = 10
-        i = 10
+        i = 20
         X = 0.5
         T = i * 0.025
-        num_time = 10 * i
+        num_time = 5 * i
         num_samples = 420
         batch_size = 5
         xs = torch.rand(num_samples,dim) * X

@@ -431,7 +431,7 @@ if __name__ == '__main__':
         T = i * 0.025
         num_time = 5 * i
         num_samples = 420
-        batch_size = 5
+        batch_size = 10
         xs = torch.rand(num_samples,dim) * X + x0
         ts = torch.rand(num_samples,1) * T
         dataset = torch.cat((xs,ts),dim=1)
