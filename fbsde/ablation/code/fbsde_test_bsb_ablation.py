@@ -391,7 +391,11 @@ if __name__ == '__main__':
         t0 = 0.
         X = 0.5
         T = i * 0.025
+<<<<<<< HEAD
         num_time = 5 * i
+=======
+        num_time = 10 * i
+>>>>>>> 0a90f32d6672aaf937cd24b67e489faa95a94765
         num_samples = 420
         batch_size = 10
         N = 1000
