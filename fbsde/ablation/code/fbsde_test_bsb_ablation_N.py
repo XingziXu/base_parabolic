@@ -288,43 +288,46 @@ class FKModule(pl.LightningModule):
         print('Validation: {:.4f}, {:.4f}'.format(loss_cnn, loss_gir))
         self.log('val_loss', loss_cnn)
         if not loss_cnn.isnan():
-            self.cnn_metrics[self.current_epoch, batch_idx] = loss_cnn.item()
-            self.gir_metrics[self.current_epoch, batch_idx] = loss_gir.item()
-            self.don_metrics[self.current_epoch, batch_idx] = loss_don.item()
-            self.em_comp_time[self.current_epoch, batch_idx] = time_em
-            self.gir_comp_time[self.current_epoch, batch_idx] = time_em
-            self.cnn_comp_time[self.current_epoch, batch_idx] = time_cnn
-            self.don_comp_time[self.current_epoch, batch_idx] = time_don
-            self.log('gir_loss_min', self.gir_metrics[np.where(self.gir_metrics!=0)].min())
-            self.log('gir_loss_mean', self.gir_metrics[np.where(self.gir_metrics!=0)].mean())
-            self.log('gir_loss_max', self.gir_metrics[np.where(self.gir_metrics!=0)].max())
-            self.log('gir_loss_var', torch.var(self.gir_metrics[np.where(self.gir_metrics!=0)]))
-            self.log('cnn_loss_min', self.cnn_metrics[np.where(self.cnn_metrics!=0)].min())
-            self.log('cnn_loss_mean', self.cnn_metrics[np.where(self.cnn_metrics!=0)].mean())
-            self.log('cnn_loss_max', self.cnn_metrics[np.where(self.cnn_metrics!=0)].max())
-            self.log('cnn_loss_var', torch.var(self.cnn_metrics[np.where(self.cnn_metrics!=0)]))
-            self.log('don_loss_min', self.don_metrics[np.where(self.don_metrics!=0)].min())
-            self.log('don_loss_mean', self.don_metrics[np.where(self.don_metrics!=0)].mean())
-            self.log('don_loss_max', self.don_metrics[np.where(self.don_metrics!=0)].max())
-            self.log('don_loss_var', torch.var(self.don_metrics[np.where(self.don_metrics!=0)]))
-            
-            
-            self.log('em_time_min', self.em_comp_time[np.where(self.em_comp_time!=0)].min())
-            self.log('em_time_mean', self.em_comp_time[np.where(self.em_comp_time!=0)].mean())
-            self.log('em_time_max', self.em_comp_time[np.where(self.em_comp_time!=0)].max())
-            self.log('em_time_var', torch.var(self.em_comp_time[np.where(self.em_comp_time!=0)]))
-            self.log('gir_time_min', self.gir_comp_time[np.where(self.gir_comp_time!=0)].min())
-            self.log('gir_time_mean', self.gir_comp_time[np.where(self.gir_comp_time!=0)].mean())
-            self.log('gir_time_max', self.gir_comp_time[np.where(self.gir_comp_time!=0)].max())
-            self.log('gir_time_var', torch.var(self.gir_comp_time[np.where(self.gir_comp_time!=0)]))
-            self.log('cnn_time_min', self.cnn_comp_time[np.where(self.cnn_comp_time!=0)].min())
-            self.log('cnn_time_mean', self.cnn_comp_time[np.where(self.cnn_comp_time!=0)].mean())
-            self.log('cnn_time_max', self.cnn_comp_time[np.where(self.cnn_comp_time!=0)].max())
-            self.log('cnn_time_var', torch.var(self.cnn_comp_time[np.where(self.cnn_comp_time!=0)]))
-            self.log('don_time_min', self.don_comp_time[np.where(self.don_comp_time!=0)].min())
-            self.log('don_time_mean', self.don_comp_time[np.where(self.don_comp_time!=0)].mean())
-            self.log('don_time_max', self.don_comp_time[np.where(self.don_comp_time!=0)].max())
-            self.log('don_time_var', torch.var(self.don_comp_time[np.where(self.don_comp_time!=0)]))
+            if not loss_cnn.isinf():
+                if not loss_gir.isnan():
+                    if not loss_gir.isinf():
+                        self.cnn_metrics[self.current_epoch, batch_idx] = loss_cnn.item()
+                        self.gir_metrics[self.current_epoch, batch_idx] = loss_gir.item()
+                        self.don_metrics[self.current_epoch, batch_idx] = loss_don.item()
+                        self.em_comp_time[self.current_epoch, batch_idx] = time_em
+                        self.gir_comp_time[self.current_epoch, batch_idx] = time_em
+                        self.cnn_comp_time[self.current_epoch, batch_idx] = time_cnn
+                        self.don_comp_time[self.current_epoch, batch_idx] = time_don
+                        self.log('gir_loss_min', self.gir_metrics[np.where(self.gir_metrics!=0)].min())
+                        self.log('gir_loss_mean', self.gir_metrics[np.where(self.gir_metrics!=0)].mean())
+                        self.log('gir_loss_max', self.gir_metrics[np.where(self.gir_metrics!=0)].max())
+                        self.log('gir_loss_var', torch.var(self.gir_metrics[np.where(self.gir_metrics!=0)]))
+                        self.log('cnn_loss_min', self.cnn_metrics[np.where(self.cnn_metrics!=0)].min())
+                        self.log('cnn_loss_mean', self.cnn_metrics[np.where(self.cnn_metrics!=0)].mean())
+                        self.log('cnn_loss_max', self.cnn_metrics[np.where(self.cnn_metrics!=0)].max())
+                        self.log('cnn_loss_var', torch.var(self.cnn_metrics[np.where(self.cnn_metrics!=0)]))
+                        self.log('don_loss_min', self.don_metrics[np.where(self.don_metrics!=0)].min())
+                        self.log('don_loss_mean', self.don_metrics[np.where(self.don_metrics!=0)].mean())
+                        self.log('don_loss_max', self.don_metrics[np.where(self.don_metrics!=0)].max())
+                        self.log('don_loss_var', torch.var(self.don_metrics[np.where(self.don_metrics!=0)]))
+                        
+                        
+                        self.log('em_time_min', self.em_comp_time[np.where(self.em_comp_time!=0)].min())
+                        self.log('em_time_mean', self.em_comp_time[np.where(self.em_comp_time!=0)].mean())
+                        self.log('em_time_max', self.em_comp_time[np.where(self.em_comp_time!=0)].max())
+                        self.log('em_time_var', torch.var(self.em_comp_time[np.where(self.em_comp_time!=0)]))
+                        self.log('gir_time_min', self.gir_comp_time[np.where(self.gir_comp_time!=0)].min())
+                        self.log('gir_time_mean', self.gir_comp_time[np.where(self.gir_comp_time!=0)].mean())
+                        self.log('gir_time_max', self.gir_comp_time[np.where(self.gir_comp_time!=0)].max())
+                        self.log('gir_time_var', torch.var(self.gir_comp_time[np.where(self.gir_comp_time!=0)]))
+                        self.log('cnn_time_min', self.cnn_comp_time[np.where(self.cnn_comp_time!=0)].min())
+                        self.log('cnn_time_mean', self.cnn_comp_time[np.where(self.cnn_comp_time!=0)].mean())
+                        self.log('cnn_time_max', self.cnn_comp_time[np.where(self.cnn_comp_time!=0)].max())
+                        self.log('cnn_time_var', torch.var(self.cnn_comp_time[np.where(self.cnn_comp_time!=0)]))
+                        self.log('don_time_min', self.don_comp_time[np.where(self.don_comp_time!=0)].min())
+                        self.log('don_time_mean', self.don_comp_time[np.where(self.don_comp_time!=0)].mean())
+                        self.log('don_time_max', self.don_comp_time[np.where(self.don_comp_time!=0)].max())
+                        self.log('don_time_var', torch.var(self.don_comp_time[np.where(self.don_comp_time!=0)]))
         return
 
     def configure_optimizers(self):
@@ -373,14 +376,14 @@ if __name__ == '__main__':
     
     for N in np.arange(50,1000,50):
         dim = 10
-        i = 40
+        i = 20
         m=100
         p=15
         x0 = 0.1
         t0 = 0.
         X = 0.5
         T = i * 0.025
-        num_time = i
+        num_time = 5 * i
         num_samples = 420
         batch_size = 5
         xs = torch.rand(num_samples,dim) * X + x0
