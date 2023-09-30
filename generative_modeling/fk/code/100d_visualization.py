@@ -25,6 +25,16 @@ with open('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_bpd_s
     bpd_std_2 = np.load(f)
 with open('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_loss_std_0.npy', 'rb') as f:
     wass_std_2 = np.load(f)
+    
+bpd_mu_2 = np.load('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_bpd_mu_0.npy')
+wass_mu_2 = np.load('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_loss_mu_0.npy')
+mag_mu_2 = np.load('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_mag_mu_0.npy')
+#wass_nf_2 = np.load('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_bpd_nf_0.npy')
+#loss_nf_2 = np.load('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_loss_nf_0.npy')
+#plt.scatter(loss_nf_2, val_nf_2, label='Prior')
+#plt.scatter(loss_mu_2, val_mu_2, label='Prior+Drift')
+#plt.savefig('/scratch/xx84/girsanov/generative_modeling/fk/figure/scratch.png')
+
 #plt.set(xscale="linear", yscale="symlog")
 #plt.xscale('symlog')
 #plt.yscale('symlog')
@@ -41,23 +51,26 @@ bpd_std_100 = bpd_std_100[(wass_std_100 <= max_wass_100)]
 wass_std_100 = wass_std_100[(wass_std_100 <= max_wass_100)]
 
 f = plt.figure(figsize=(12, 8))
-gs = f.add_gridspec(1, 2)
+gs = f.add_gridspec(1, 1)
 
 with sns.axes_style("whitegrid"):
     ax = f.add_subplot(gs[0])
-    sns.regplot(x=wass_nf_2, y=bpd_nf_2, scatter_kws={'color': 'teal', 'alpha': 0.3, 's':100}, line_kws = {'color': 'teal', 'alpha': 0.9,'lw':2}, label='$p_{meta}$')
-    sns.regplot(x=wass_std_2, y=bpd_std_2, scatter_kws={'color': 'tomato', 'alpha': 0.3, 's':100}, line_kws={'color': 'tomato', 'alpha': 0.9,'lw':2}, label='Gaussian')
+    plt.scatter(x=wass_nf_2, y=bpd_nf_2, scatter_kws={'color': 'teal', 'alpha': 0.3, 's':100}, line_kws = {'color': 'teal', 'alpha': 0.9,'lw':2}, label='$p_{meta}$')
+    plt.scatter(x=wass_mu_2, y=bpd_mu_2, scatter_kws={'color': 'darkorange', 'alpha': 0.3, 's':100}, line_kws = {'color': 'darkorange', 'alpha': 0.9,'lw':2}, label='$p_{meta}+\mu_{meta}$')
+    #sns.regplot(x=wass_nf_2, y=bpd_nf_2, scatter_kws={'color': 'teal', 'alpha': 0.3, 's':100}, line_kws = {'color': 'teal', 'alpha': 0.9,'lw':2}, label='$p_{meta}$')
+    #sns.regplot(x=wass_std_2, y=bpd_std_2, scatter_kws={'color': 'tomato', 'alpha': 0.3, 's':100}, line_kws={'color': 'tomato', 'alpha': 0.9,'lw':2}, label='Gaussian')
+    #sns.regplot(x=wass_mu_2, y=bpd_mu_2, scatter_kws={'color': 'darkorange', 'alpha': 0.3, 's':100}, line_kws = {'color': 'darkorange', 'alpha': 0.9,'lw':2}, label='$p_{meta}+\mu_{meta}$')
     ax.set(xlabel='Wasserstein Distance', ylabel='Bits/Dim', title='$2$-$d$')
 
-with sns.axes_style("whitegrid"):
-    ax = f.add_subplot(gs[1])
-    sns.regplot(x=wass_nf_100, y=bpd_nf_100, scatter_kws = {'color': 'teal', 'alpha': 0.3, 's':100}, line_kws = {'color': 'teal', 'alpha': 0.9,'lw':2}, label='$p_{meta}$')
-    sns.regplot(x=wass_std_100, y=bpd_std_100, scatter_kws={'color': 'tomato', 'alpha': 0.3, 's':100}, line_kws={'color': 'tomato', 'alpha': 0.9,'lw':2}, label='Gaussian')
-    ax.set(xlabel='Wasserstein Distance', title='$100$-$d$')
+#with sns.axes_style("whitegrid"):
+#    ax = f.add_subplot(gs[1])
+#    sns.regplot(x=wass_nf_100, y=bpd_nf_100, scatter_kws = {'color': 'teal', 'alpha': 0.3, 's':100}, line_kws = {'color': 'teal', 'alpha': 0.9,'lw':2}, label='$p_{meta}$')
+#    sns.regplot(x=wass_std_100, y=bpd_std_100, scatter_kws={'color': 'tomato', 'alpha': 0.3, 's':100}, line_kws={'color': 'tomato', 'alpha': 0.9,'lw':2}, label='Gaussian')
+#    ax.set(xlabel='Wasserstein Distance', title='$100$-$d$')
 
 handles, labels = ax.get_legend_handles_labels()
-f.legend(handles, labels, loc='upper center')
+f.legend(handles, labels, loc='upper right')
 
 plt.tight_layout()
-plt.savefig('/scratch/xx84/girsanov/generative_modeling/fk/figure/meta_reg.pdf')
+plt.savefig('/scratch/xx84/girsanov/generative_modeling/fk/figure/meta_reg.png')
 plt.clf()

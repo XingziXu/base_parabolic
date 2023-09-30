@@ -141,7 +141,7 @@ class FKModule(pl.LightningModule):
         idx_ = batch_idx % self.coef_train.shape[0]
         u_em, u_gir, u_rnn = self.loss(xt, coef=self.coef_train[idx_].unsqueeze(0).to(device))
         loss = F.l1_loss(u_rnn, u_gir)
-        #tensorboard_logs = {'train_loss': loss_prior}
+        tensorboard_logs = {'train_loss': loss}
         self.log('train_loss', loss)
         #print(loss_total)
         return {'loss': loss}
@@ -186,7 +186,7 @@ class FKModule(pl.LightningModule):
 
 
 if __name__ == '__main__':
-    pl.seed_everything(1234)
+    pl.seed_everything(1235)
     print(sys.executable)
     #dataset = MNIST(os.getcwd(), train=True, download=True, transform=transforms.ToTensor())
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
@@ -199,15 +199,15 @@ if __name__ == '__main__':
     X = 0.5
     T = 0.1
     num_time = 40
-    dim = 20
-    num_samples = 12000
-    batch_size = 40
-    N = 4000
+    dim = 5
+    num_samples = 4000
+    batch_size = 20
+    N = 2000
     xs = torch.rand(num_samples,dim) * X + x0
     ts = torch.rand(num_samples,1) * T
     dataset = torch.cat((xs,ts),dim=1)
     data_train = dataset[:num_samples// 2,:]
-    data_val = dataset[num_samples //2 :,:]
+    data_val = dataset[num_samples //2 :num_samples //2 +20,:]
     
     train_kwargs = {'batch_size': batch_size,
             'shuffle': True,
@@ -223,7 +223,7 @@ if __name__ == '__main__':
     val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
     model = FKModule(m=m, dim=dim, p=p, batch_size = batch_size, lr=1e-3, X=X, T=T, N=N, num_time=num_time, n_batch_val=n_batch_val)
-    trainer = pl.Trainer(max_epochs=50, gpus=1, check_val_every_n_epoch=1)
+    trainer = pl.Trainer(max_epochs=10, gpus=1, check_val_every_n_epoch=1)
     trainer.fit(model, train_loader, val_loader)
     
     print(trainer.logged_metrics['val_loss'])

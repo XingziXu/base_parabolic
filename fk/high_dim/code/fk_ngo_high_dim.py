@@ -85,7 +85,7 @@ class CNN_expmart(nn.Module):
 
 
 class FKModule(pl.LightningModule):
-    def __init__(self, N = 2000, lr = 1e-3, X = 1., T = 0.1, dim = 2, batch_size = 100, num_time = 100, n_batch_val=100):
+    def __init__(self, N = 2000, lr = 1e-5, X = 1., T = 0.1, dim = 2, batch_size = 100, num_time = 100, n_batch_val=100):
         super().__init__()
         # define normalizing flow to model the conditional distribution rho(x,t)=p(y|x,t)
         self.num_time = num_time
@@ -168,13 +168,21 @@ class FKModule(pl.LightningModule):
         xt = batch.to(device)
         u_em, u_gir, u_cnn, time_em, time_gir, time_cnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
         loss = F.l1_loss(u_cnn, u_gir)#/(torch.abs(u_gir).mean())
-        #tensorboard_logs = {'train_loss': loss_prior}
+        tensorboard_logs = {'train_loss': loss}
         self.log('train_loss', loss)
         #print(loss_total)
         return {'loss': loss}
         
         
     def validation_step(self, batch, batch_idx):
+        #val_mu = np.load('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_bpd_mu_0.npy')
+        #loss_mu = np.load('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_loss_mu_0.npy')
+        #mag_mu = np.load('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_mag_mu_0.npy')
+        #val_nf = np.load('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_bpd_nf_0.npy')
+        #loss_nf = np.load('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_loss_nf_0.npy')
+        #plt.scatter(loss_mu, val_mu, label='Prior')
+        #plt.scatter(loss_mu, val_mu, label='Prior+Drift')
+        #plt.savefig('/scratch/xx84/girsanov/generative_modeling/fk/figure/scratch.png')
         xt = batch.to(device)
         u_em, u_gir, u_cnn, time_em, time_gir, time_cnn = self.loss(xt, coef=torch.rand(1,1,1,3).to(device))
         loss_cnn = F.mse_loss(u_cnn,u_em,reduction='mean')/(torch.abs(u_em).mean())
@@ -226,7 +234,7 @@ class FKModule(pl.LightningModule):
 
 
 if __name__ == '__main__':
-    pl.seed_everything(1234)
+    pl.seed_everything(1241)
     print(sys.executable)
     #dataset = MNIST(os.getcwd(), train=True, download=True, transform=transforms.ToTensor())
     #mnist_test = MNIST(os.getcwd(), train=False, download=True, transform=transforms.ToTensor())
@@ -237,15 +245,15 @@ if __name__ == '__main__':
     X = 0.5
     T = 0.1
     num_time = 40
-    dim = 20
-    num_samples = 12000
-    batch_size = 10
-    N = 4000
+    dim = 5
+    num_samples = 4000
+    batch_size = 20
+    N = 2000
     xs = torch.rand(num_samples,dim) * X + x0
     ts = torch.rand(num_samples,1) * T
     dataset = torch.cat((xs,ts),dim=1)
     data_train = dataset[:num_samples// 2,:]
-    data_val = dataset[num_samples //2 :,:]
+    data_val = dataset[num_samples //2 :num_samples //2 +20,:]
     
     train_kwargs = {'batch_size': batch_size,
             'shuffle': True,
@@ -261,7 +269,7 @@ if __name__ == '__main__':
     val_loader = torch.utils.data.DataLoader(data_val, **test_kwargs)
 
     model = FKModule(X=X, T=T, batch_size=batch_size, dim=dim, num_time=num_time, N=N, n_batch_val=n_batch_val)
-    trainer = pl.Trainer(max_epochs=50, gpus=1, check_val_every_n_epoch=1)
+    trainer = pl.Trainer(max_epochs=10, gpus=1, check_val_every_n_epoch=1)
     trainer.fit(model, train_loader, val_loader)
     
     print(trainer.logged_metrics['val_loss'])
