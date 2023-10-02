@@ -21,6 +21,7 @@ with open('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_train
 
 with open('/scratch/xx84/girsanov/generative_modeling/fk/result/2dgaussian_metaset.npy', 'rb') as f:
     gmeta = np.load(f)
+
 #plt.set(xscale="linear", yscale="symlog")
 #plt.xscale('symlog')
 #plt.yscale('symlog')
